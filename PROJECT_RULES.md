@@ -20,6 +20,12 @@
 
 ---
 
+## Environment
+
+- **Python Virtual Environment** — ALWAYS use the `a_lab` virtual environment located at `c:\Users\Joonh\agent_lab\agent_lab\a_lab`. Run commands using `.\a_lab\Scripts\python.exe` or `.\a_lab\Scripts\pip.exe`.
+
+---
+
 ## Proof Requirements
 
 Every change requires verification evidence:
