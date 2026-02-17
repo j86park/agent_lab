@@ -46,6 +46,26 @@ Parse:
 - Verification criteria
 - Success criteria
 
+### Step 2.5: Load Project-Specific Skills (MANDATORY)
+
+Before writing ANY code, read the project skills file:
+
+```
+.agent/skills/agent-lab-skills/SKILL.md
+```
+
+This file contains library-specific rules, best practices, and gotchas for the Agent Lab tech stack (FastAPI, SQLAlchemy 2.0, Docker SDK, LLM SDKs, React/TypeScript, shadcn/ui, etc.).
+
+**You MUST:**
+1. Read the skills file at the start of every execution session
+2. Follow all rules and patterns documented in the file
+3. Use the ✅ patterns and avoid the ❌ anti-patterns
+4. If you discover a new gotcha during execution, add it to the skills file
+
+**This is non-negotiable.** Violations of project skills rules (e.g., using legacy SQLAlchemy 1.x query style, deprecated FastAPI events, or old OpenAI API) will require rework.
+
+---
+
 ### Step 3: Determine Execution Pattern
 
 **Pattern A: Fully autonomous (no checkpoints)**
