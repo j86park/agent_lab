@@ -29,3 +29,5 @@
 | REQ-23 | Backend serves REST API + WebSocket on port 8000 | Architecture | Pending |
 | REQ-24 | Frontend serves React app on port 3000 | Architecture | Pending |
 | REQ-25 | Works on Mac, Linux, and Windows with Docker Desktop | SC-13 | Pending |
+| REQ-26 | Modular Skills library: store/load instruction blocks in `~/.agent-lab/skills/` | Goal 7 | Pending |
+| REQ-27 | Agent Orchestrator injects assigned skill instructions into the system prompt | Goal 7 | Pending |
