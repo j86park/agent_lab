@@ -1,24 +1,60 @@
-# GSD State Files (Ignore local project state)
-.gsd/ARCHITECTURE.md
-.gsd/DECISIONS.md
-.gsd/JOURNAL.md
-.gsd/ROADMAP.md
-.gsd/SPEC.md
-.gsd/STACK.md
-.gsd/STATE.md
-.gsd/TODO.md
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
 
-# OS generated
-Thumbs.db
-.DS_Store
+# C extensions
+*.so
 
-.gemini/
-adapters/
-scripts/
-docs/
-PROJECT_RULES.md
-GSD-STYLE.md
-model_capabilities.yaml
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
-#env
+# Environment
+.env
+.env.*
+!.env.example
+
+# Python
 a_lab/
+env/
+venv/
+.venv/
+.pytest_cache/
+.coverage
+.cache/
+
+# Node
+node_modules/
+frontend/dist/
+frontend/node_modules/
+.npm
+.eslintcache
+
+# Project
+*.sqlite
+.agent-lab/
+backend/data/
+frontend/data/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
