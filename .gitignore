@@ -1,0 +1,22 @@
+# GSD State Files (Ignore local project state)
+.gsd/ARCHITECTURE.md
+.gsd/DECISIONS.md
+.gsd/JOURNAL.md
+.gsd/ROADMAP.md
+.gsd/SPEC.md
+.gsd/STACK.md
+.gsd/STATE.md
+.gsd/TODO.md
+
+# OS generated
+Thumbs.db
+.DS_Store
+
+.agent/
+.gemini/
+adapters/
+scripts/
+docs/
+PROJECT_RULES.md
+GSD-STYLE.md
+model_capabilities.yaml
