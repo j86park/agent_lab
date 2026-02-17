@@ -37,7 +37,7 @@
 ---
 
 ### Phase 2: Agent Configuration & Persistence
-**Status**: ⬜ Not Started
+**Status**: 📋 Planned
 **Objective**: Build the full agent CRUD system — backend API + frontend UI — so users can create, edit, save, and load agent configurations.
 **Requirements**: REQ-02, REQ-03, REQ-05, REQ-22
 
