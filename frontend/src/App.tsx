@@ -7,6 +7,7 @@ import HistoryPage from "./pages/HistoryPage";
 import TemplatesPage from "./pages/TemplatesPage";
 import SkillsPage from "./pages/SkillsPage";
 import SettingsPage from "./pages/SettingsPage";
+import { Toaster } from "@/components/ui/sonner";
 
 function App() {
   return (
@@ -23,6 +24,7 @@ function App() {
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
       </Routes>
+      <Toaster position="top-right" />
     </BrowserRouter>
   );
 }
