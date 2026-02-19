@@ -97,7 +97,7 @@
 ---
 
 ### Phase 6: Polish, Documentation & Launch Prep
-**Status**: ⬜ Not Started
+**Status**: 📋 Planned
 **Objective**: Harden error handling, polish UI/UX, write documentation, and prepare for public release.
 **Requirements**: REQ-25
 
