@@ -68,7 +68,7 @@
 ---
 
 ### Phase 4: Real-Time Observability & Run Dashboard
-**Status**: ⬜ Not Started
+**Status**: 📋 Planned
 **Objective**: Build the real-time execution experience — log streaming, run dashboard, cost counters, and execution timeline.
 **Requirements**: REQ-12, REQ-14
 
