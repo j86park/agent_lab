@@ -4,6 +4,7 @@ import HomePage from "./pages/HomePage";
 import AgentEditorPage from "./pages/AgentEditorPage";
 import RunDashboardPage from "./pages/RunDashboardPage";
 import HistoryPage from "./pages/HistoryPage";
+import CompareRunsPage from "./pages/CompareRunsPage";
 import TemplatesPage from "./pages/TemplatesPage";
 import SkillsPage from "./pages/SkillsPage";
 import SettingsPage from "./pages/SettingsPage";
@@ -19,6 +20,7 @@ function App() {
           <Route path="/agents/:id" element={<AgentEditorPage />} />
           <Route path="/runs/:id" element={<RunDashboardPage />} />
           <Route path="/history" element={<HistoryPage />} />
+          <Route path="/history/compare" element={<CompareRunsPage />} />
           <Route path="/templates" element={<TemplatesPage />} />
           <Route path="/skills" element={<SkillsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
