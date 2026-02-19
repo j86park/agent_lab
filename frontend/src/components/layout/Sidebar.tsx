@@ -7,46 +7,82 @@ import {
     LayoutTemplate,
     BrainCircuit,
     Settings,
-    Beaker
+    FlaskConical,
 } from "lucide-react";
 
-const navItems = [
+const WORKSPACE_ITEMS = [
     { icon: Home, label: "Agents", href: "/" },
     { icon: PlusSquare, label: "New Agent", href: "/agents/new" },
     { icon: History, label: "History", href: "/history" },
     { icon: LayoutTemplate, label: "Templates", href: "/templates" },
     { icon: BrainCircuit, label: "Skills", href: "/skills" },
+];
+
+const SYSTEM_ITEMS = [
     { icon: Settings, label: "Settings", href: "/settings" },
 ];
 
+function NavSection({
+    label,
+    items,
+}: {
+    label: string;
+    items: { icon: React.ElementType; label: string; href: string }[];
+}) {
+    return (
+        <div className="space-y-0.5">
+            <p className="px-3 pb-1 pt-4 text-[10px] font-mono font-semibold tracking-widest uppercase text-muted-foreground/60 select-none">
+                {label}
+            </p>
+            {items.map((item) => (
+                <NavLink
+                    key={item.href}
+                    to={item.href}
+                    end={item.href === "/"}
+                    className={({ isActive }) =>
+                        cn(
+                            "flex items-center gap-2.5 rounded-sm px-3 py-1.5 text-xs font-medium tracking-wide transition-colors",
+                            isActive
+                                ? "bg-accent text-foreground border-l-2 border-primary pl-[10px]"
+                                : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
+                        )
+                    }
+                >
+                    <item.icon className="h-3.5 w-3.5 shrink-0" />
+                    {item.label}
+                </NavLink>
+            ))}
+        </div>
+    );
+}
+
 export default function Sidebar() {
     return (
-        <div className="flex h-full w-64 flex-col border-r bg-card text-card-foreground">
-            <div className="flex h-16 items-center border-b px-6 gap-2">
-                <Beaker className="h-6 w-6 text-primary" />
-                <span className="text-xl font-bold tracking-tight">Agent Lab</span>
+        <div className="flex h-full w-56 flex-col bg-sidebar border-r border-sidebar-border">
+            {/* Logo */}
+            <div className="flex h-14 items-center border-b border-sidebar-border px-4 gap-2.5">
+                <FlaskConical className="h-4 w-4 text-primary shrink-0" />
+                <div>
+                    <p className="text-xs font-mono font-semibold tracking-widest uppercase text-foreground leading-none">
+                        Agent Lab
+                    </p>
+                    <p className="text-[10px] text-muted-foreground/60 font-mono mt-0.5">
+                        v1.0.0
+                    </p>
+                </div>
             </div>
-            <nav className="flex-1 overflow-y-auto p-4 space-y-1">
-                {navItems.map((item) => (
-                    <NavLink
-                        key={item.href}
-                        to={item.href}
-                        className={({ isActive }) =>
-                            cn(
-                                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground",
-                                isActive ? "bg-accent text-accent-foreground" : "text-muted-foreground"
-                            )
-                        }
-                    >
-                        <item.icon className="h-4 w-4" />
-                        {item.label}
-                    </NavLink>
-                ))}
+
+            {/* Navigation */}
+            <nav className="flex-1 overflow-y-auto px-2 py-1">
+                <NavSection label="Workspace" items={WORKSPACE_ITEMS} />
+                <NavSection label="System" items={SYSTEM_ITEMS} />
             </nav>
-            <div className="border-t p-4">
-                <div className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">
-                    <p className="font-medium text-foreground">Local Execution</p>
-                    <p>All data stays on your hardware.</p>
+
+            {/* Status footer */}
+            <div className="border-t border-sidebar-border px-4 py-3">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500 shrink-0" />
+                    <span className="font-mono text-[11px]">Running locally</span>
                 </div>
             </div>
         </div>
