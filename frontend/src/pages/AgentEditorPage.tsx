@@ -7,6 +7,7 @@ import {
     Loader2,
     AlertCircle,
     Play,
+    Download,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -103,6 +104,9 @@ export default function AgentEditorPage() {
     const [error, setError] = useState<string | null>(null);
     const [runTask, setRunTask] = useState("");
     const [isStartingRun, setIsStartingRun] = useState(false);
+    const [exportFormat, setExportFormat] = useState<"python" | "fastapi" | "docker">("python");
+    const [isExporting, setIsExporting] = useState(false);
+    const [exportOpen, setExportOpen] = useState(false);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -195,6 +199,27 @@ export default function AgentEditorPage() {
         }
     };
 
+    const handleExport = async () => {
+        if (!id) return;
+        setIsExporting(true);
+        try {
+            const { filename, content } = await agentApi.exportAgent(id, exportFormat);
+            const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+            toast.success(`Downloaded ${filename}`);
+            setExportOpen(false);
+        } catch (err: any) {
+            toast.error(err.message || "Export failed");
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
     if (isLoading) {
         return (
             <div className="flex h-[400px] items-center justify-center">
@@ -245,29 +270,92 @@ export default function AgentEditorPage() {
                 </div>
                 <div className="flex items-center gap-3">
                     {isEditMode && (
-                        <Dialog>
-                            <DialogTrigger asChild>
-                                <Button variant="destructive" disabled={isDeleting}>
-                                    {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-                                    Delete
-                                </Button>
-                            </DialogTrigger>
-                            <DialogContent>
-                                <DialogHeader>
-                                    <DialogTitle>Are you absolutely sure?</DialogTitle>
-                                    <DialogDescription>
-                                        This action cannot be undone. This will permanently delete the agent
-                                        and all associated run history.
-                                    </DialogDescription>
-                                </DialogHeader>
-                                <DialogFooter>
-                                    <Button variant="outline" onClick={() => { }}>Cancel</Button>
-                                    <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
-                                        {isDeleting ? "Deleting..." : "Permanently Delete"}
+                        <>
+                            {/* Export Dialog */}
+                            <Dialog open={exportOpen} onOpenChange={setExportOpen}>
+                                <DialogTrigger asChild>
+                                    <Button variant="outline">
+                                        <Download className="mr-2 h-4 w-4" />
+                                        Export
                                     </Button>
-                                </DialogFooter>
-                            </DialogContent>
-                        </Dialog>
+                                </DialogTrigger>
+                                <DialogContent className="sm:max-w-md">
+                                    <DialogHeader>
+                                        <DialogTitle>Export Agent</DialogTitle>
+                                        <DialogDescription>
+                                            Download this agent as standalone, production-ready code.
+                                        </DialogDescription>
+                                    </DialogHeader>
+                                    <div className="space-y-4 py-2">
+                                        {/* Format picker */}
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {[
+                                                { value: "python" as const, label: "Python Script", desc: "CLI agent.py" },
+                                                { value: "fastapi" as const, label: "FastAPI App", desc: "REST API server" },
+                                                { value: "docker" as const, label: "Dockerfile", desc: "Container-ready" },
+                                            ].map(({ value, label, desc }) => (
+                                                <button
+                                                    key={value}
+                                                    type="button"
+                                                    onClick={() => setExportFormat(value)}
+                                                    className={`rounded-lg border p-3 text-left transition-colors ${exportFormat === value
+                                                            ? "border-primary bg-primary/10"
+                                                            : "border-border hover:bg-muted/50"
+                                                        }`}
+                                                >
+                                                    <p className="text-sm font-semibold">{label}</p>
+                                                    <p className="text-xs text-muted-foreground">{desc}</p>
+                                                </button>
+                                            ))}
+                                        </div>
+                                        {/* What's included */}
+                                        <div className="rounded-md bg-muted/50 px-4 py-3 text-sm space-y-1">
+                                            <p className="font-medium">Includes</p>
+                                            <ul className="text-muted-foreground text-xs space-y-0.5 list-disc list-inside">
+                                                <li>Full system prompt</li>
+                                                <li>Provider & model config ({formData.provider} / {formData.model})</li>
+                                                <li>API key loaded from environment variable</li>
+                                                {exportFormat === "fastapi" && <li>POST /chat endpoint + GET /health</li>}
+                                                {exportFormat === "docker" && <li>Dockerfile + embedded requirements</li>}
+                                            </ul>
+                                        </div>
+                                    </div>
+                                    <DialogFooter>
+                                        <Button variant="outline" onClick={() => setExportOpen(false)}>Cancel</Button>
+                                        <Button onClick={handleExport} disabled={isExporting}>
+                                            {isExporting
+                                                ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating…</>
+                                                : <><Download className="mr-2 h-4 w-4" /> Download</>}
+                                        </Button>
+                                    </DialogFooter>
+                                </DialogContent>
+                            </Dialog>
+
+                            {/* Delete Dialog */}
+                            <Dialog>
+                                <DialogTrigger asChild>
+                                    <Button variant="destructive" disabled={isDeleting}>
+                                        {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                                        Delete
+                                    </Button>
+                                </DialogTrigger>
+                                <DialogContent>
+                                    <DialogHeader>
+                                        <DialogTitle>Are you absolutely sure?</DialogTitle>
+                                        <DialogDescription>
+                                            This action cannot be undone. This will permanently delete the agent
+                                            and all associated run history.
+                                        </DialogDescription>
+                                    </DialogHeader>
+                                    <DialogFooter>
+                                        <Button variant="outline" onClick={() => { }}>Cancel</Button>
+                                        <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+                                            {isDeleting ? "Deleting..." : "Permanently Delete"}
+                                        </Button>
+                                    </DialogFooter>
+                                </DialogContent>
+                            </Dialog>
+                        </>
                     )}
                     <Button onClick={handleSave} disabled={isSaving}>
                         {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}

@@ -9,6 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_session
 from app.models import Agent
 from app.schemas import AgentCreate, AgentUpdate, AgentResponse, AgentListResponse
+from app.services.export_generators import (
+    generate_python_script,
+    generate_fastapi_app,
+    generate_dockerfile,
+)
 
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])
@@ -99,3 +104,49 @@ async def delete_agent(agent_id: str, session: AsyncSession = Depends(get_sessio
     await session.delete(agent)
     await session.commit()
     return None
+
+
+_EXPORT_FORMATS = {"python", "fastapi", "docker"}
+
+_EXPORT_FILENAMES = {
+    "python": "agent.py",
+    "fastapi": "agent_app.py",
+    "docker": "Dockerfile",
+}
+
+
+@router.get("/{agent_id}/export")
+async def export_agent(
+    agent_id: str,
+    format: str = "python",
+    session: AsyncSession = Depends(get_session),
+):
+    """Export an agent as standalone code.
+
+    format: "python" | "fastapi" | "docker"
+    """
+    if format not in _EXPORT_FORMATS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown format '{format}'. Valid options: {sorted(_EXPORT_FORMATS)}",
+        )
+
+    result = await session.execute(select(Agent).where(Agent.id == agent_id))
+    agent = result.scalar_one_or_none()
+    if not agent:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found"
+        )
+
+    if format == "python":
+        content = generate_python_script(agent)
+    elif format == "fastapi":
+        content = generate_fastapi_app(agent)
+    else:  # docker
+        content = generate_dockerfile(agent)
+
+    return {
+        "filename": _EXPORT_FILENAMES[format],
+        "content": content,
+        "format": format,
+    }
