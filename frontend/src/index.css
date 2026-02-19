@@ -107,10 +107,7 @@
 }
 
 @layer base {
-    /* Force dark class on the root so all shadcn/ui dark: variants activate */
-    html {
-        @apply dark;
-    }
+    /* dark class is set on <html> in index.html — all shadcn/ui dark: variants apply */
 
     * {
         @apply border-border outline-ring/50;
