@@ -82,7 +82,7 @@
 ---
 
 ### Phase 5: History, Comparison & Export
-**Status**: ⬜ Not Started
+**Status**: 📋 Planned
 **Objective**: Build run history persistence, side-by-side comparison, and agent export capabilities.
 **Requirements**: REQ-13, REQ-15, REQ-16, REQ-17, REQ-18, REQ-21
 
