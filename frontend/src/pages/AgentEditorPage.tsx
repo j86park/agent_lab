@@ -6,10 +6,11 @@ import {
     Trash2,
     Loader2,
     AlertCircle,
+    Play,
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { agentApi, skillApi, type Agent, type Skill } from "@/lib/api";
+import { agentApi, runApi, skillApi, type Agent, type Skill } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
     Card,
@@ -100,6 +101,8 @@ export default function AgentEditorPage() {
     const [isSaving, setIsSaving] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [runTask, setRunTask] = useState("");
+    const [isStartingRun, setIsStartingRun] = useState(false);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -171,6 +174,24 @@ export default function AgentEditorPage() {
             console.error("Failed to delete agent", err);
             toast.error(err.message || "Failed to delete agent");
             setIsDeleting(false);
+        }
+    };
+
+    const handleStartRun = async () => {
+        if (!id || !runTask.trim()) {
+            toast.error("Please enter a task description");
+            return;
+        }
+        setIsStartingRun(true);
+        try {
+            const run = await runApi.createRun(id, runTask.trim());
+            toast.success("Run started!");
+            navigate(`/runs/${run.id}`);
+        } catch (err: any) {
+            console.error("Failed to start run", err);
+            toast.error(err.message || "Failed to start run");
+        } finally {
+            setIsStartingRun(false);
         }
     };
 
@@ -355,7 +376,7 @@ export default function AgentEditorPage() {
                 <div className="space-y-6">
                     <Card>
                         <CardHeader>
-                            <CardTitle>Model & Provider</CardTitle>
+                            <CardTitle>Model &amp; Provider</CardTitle>
                             <CardDescription>Select the brain for your agent.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
@@ -435,6 +456,35 @@ export default function AgentEditorPage() {
                             </div>
                         </CardContent>
                     </Card>
+
+                    {/* Run Agent — only for saved agents */}
+                    {isEditMode && (
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Run Agent</CardTitle>
+                                <CardDescription>Start a new agent run with a task.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                                <Textarea
+                                    id="run-task"
+                                    placeholder="Describe the task for this agent…"
+                                    value={runTask}
+                                    onChange={(e) => setRunTask(e.target.value)}
+                                    className="min-h-[100px] resize-none text-sm"
+                                />
+                                <Button
+                                    className="w-full"
+                                    onClick={handleStartRun}
+                                    disabled={isStartingRun || !runTask.trim()}
+                                >
+                                    {isStartingRun
+                                        ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        : <Play className="mr-2 h-4 w-4" />}
+                                    {isStartingRun ? "Starting…" : "Start Run"}
+                                </Button>
+                            </CardContent>
+                        </Card>
+                    )}
                 </div>
             </div>
         </div>
