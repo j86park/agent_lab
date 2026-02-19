@@ -213,7 +213,7 @@ export default function RunDashboardPage() {
                 // Will be followed by onclose
             };
 
-            ws.onclose = (ev) => {
+            ws.onclose = () => {
                 // Don't reconnect if run is done or component is unmounted
                 if (cancelled) return;
                 setRun((prev) => {
