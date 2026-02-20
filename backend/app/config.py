@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 from typing import Optional
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -54,7 +55,12 @@ class Settings(BaseSettings):
         for d in dirs:
             d.mkdir(parents=True, exist_ok=True)
 
-    model_config = {"env_prefix": "AGENT_LAB_"}
+    model_config = SettingsConfigDict(
+        env_prefix="AGENT_LAB_",
+        env_file=(".env", ".env.local"),
+        env_file_encoding="utf-8",
+        extra="ignore"
+    )
 
 
 # Singleton settings instance

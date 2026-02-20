@@ -99,6 +99,7 @@ export default function HistoryPage() {
     const [statusFilter, setStatusFilter] = useState<string>("all");
     const [agentFilter, setAgentFilter] = useState<string>("all");
     const [tagFilter, setTagFilter] = useState<string>("");
+    const [debouncedTagFilter, setDebouncedTagFilter] = useState<string>("");
     const [page, setPage] = useState(0);
 
     // Comparison selection (max 2)
@@ -119,7 +120,7 @@ export default function HistoryPage() {
         setLoading(true);
         try {
             const agentId = agentFilter !== "all" ? agentFilter : undefined;
-            const res = await runApi.listRuns(agentId, page * PAGE_SIZE, PAGE_SIZE, tagFilter || undefined);
+            const res = await runApi.listRuns(agentId, page * PAGE_SIZE, PAGE_SIZE, debouncedTagFilter || undefined);
             // client-side status filter (API doesn't support it yet)
             const filtered =
                 statusFilter === "all"
@@ -132,7 +133,7 @@ export default function HistoryPage() {
         } finally {
             setLoading(false);
         }
-    }, [agentFilter, statusFilter, page, tagFilter]);
+    }, [agentFilter, statusFilter, page, debouncedTagFilter]);
 
     useEffect(() => {
         loadAgents();
@@ -140,7 +141,15 @@ export default function HistoryPage() {
 
     useEffect(() => {
         setPage(0);
-    }, [statusFilter, agentFilter, tagFilter]);
+    }, [statusFilter, agentFilter, debouncedTagFilter]);
+
+    // Debounce tag filter
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedTagFilter(tagFilter);
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [tagFilter]);
 
     useEffect(() => {
         loadRuns();
@@ -247,7 +256,6 @@ export default function HistoryPage() {
                 </Select>
 
                 <div className="relative">
-                    <SelectTrigger className="w-[100px] h-9 absolute left-0 opacity-0 pointer-events-none" /> {/* Spacer for consistent layout if needed */}
                     <Input
                         placeholder="Filter by tag..."
                         className="w-[200px] h-9 pl-8"
