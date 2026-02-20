@@ -121,6 +121,7 @@ class RunCreate(BaseModel):
     agent_id: str
     task: str = Field(..., min_length=1, description="The user's task description")
     variable_values: Optional[dict[str, str]] = None  # {{var}} substitution values
+    tags: Optional[str] = None  # comma-separated labels e.g. "baseline,v2"
 
 
 class RunResponse(BaseModel):
@@ -134,10 +135,16 @@ class RunResponse(BaseModel):
     duration_seconds: Optional[float] = None
     error_message: Optional[str] = None
     resolved_prompt: Optional[str] = None
+    tags: Optional[str] = None
     created_at: datetime
     completed_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class RunTagUpdate(BaseModel):
+    """Schema for updating run tags via PATCH."""
+    tags: Optional[str] = None
 
 
 class RunListResponse(BaseModel):

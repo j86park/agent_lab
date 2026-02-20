@@ -9,11 +9,11 @@
 - **Status**: Ready for execution
 
 ## Last Session Summary
-Phase 6 completed (dark theme, README, docs). Phase 7 planned with 4 plans (all wave 1):
-- 7.1: Workspace File Uploads (backend endpoint + sandbox injection + frontend upload UI)
-- 7.2: Persistent Agent Workspace (Docker bind-mount per agent + workspace panel)
-- 7.3: Prompt Variables `{{var}}` (regex detection + per-run resolution + UI form)
-- 7.4: Quick Re-Run button + Run Tags (tag DB column, PATCH endpoint, History filter)
+Phase 7.1 (Uploads), 7.2 (Persistence), and 7.3 (Prompt Variables) are completed, verified, and committed. 
+- `7/1-SUMMARY.md`, `7/2-SUMMARY.md`, `7/3-SUMMARY.md` generated.
+- Backend support for `resolved_prompt` and `tags` added.
+- Prompt variable UI added to `AgentEditorPage.tsx`.
 
 ## Next Steps
-1. `/execute 7` — Execute Phase 7
+1. Complete 7.4 (Frontend UI for Re-run and Tags)
+2. Verify Phase 7 Goal

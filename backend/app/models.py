@@ -114,6 +114,7 @@ class Run(Base):
     duration_seconds: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     resolved_prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # system prompt with vars substituted
+    tags: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)  # comma-separated labels
     created_at: Mapped[datetime] = mapped_column(
         nullable=False, server_default=func.now()
     )

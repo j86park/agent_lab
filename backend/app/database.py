@@ -44,6 +44,7 @@ async def init_db() -> None:
     # Additive migrations — safe to run on every startup
     migrations = [
         "ALTER TABLE runs ADD COLUMN resolved_prompt TEXT",
+        "ALTER TABLE runs ADD COLUMN tags VARCHAR(500)",
     ]
     async with engine.begin() as conn:
         for stmt in migrations:

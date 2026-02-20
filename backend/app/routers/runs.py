@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import get_session
 from app.models import Agent, Run, RunLog
-from app.schemas import RunCreate, RunListResponse, RunLogResponse, RunResponse
+from app.schemas import RunCreate, RunListResponse, RunLogResponse, RunResponse, RunTagUpdate
 from app.services.orchestrator import AgentOrchestrator
 
 logger = logging.getLogger(__name__)
@@ -88,6 +88,7 @@ async def create_run(
         task=payload.task,
         status="pending",
         resolved_prompt=resolved,
+        tags=payload.tags,
     )
     session.add(run)
     await session.commit()
@@ -103,17 +104,22 @@ async def create_run(
 @router.get("", response_model=RunListResponse)
 async def list_runs(
     agent_id: Optional[str] = Query(None, description="Filter by agent ID"),
+    tag: Optional[str] = Query(None, description="Filter by tag substring"),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     session: AsyncSession = Depends(get_session),
 ) -> RunListResponse:
-    """List all runs, optionally filtered by agent, newest first."""
+    """List all runs, optionally filtered by agent and/or tag, newest first."""
     stmt = select(Run).order_by(Run.created_at.desc()).offset(skip).limit(limit)
     count_stmt = select(func.count()).select_from(Run)
 
     if agent_id:
         stmt = stmt.where(Run.agent_id == agent_id)
         count_stmt = count_stmt.where(Run.agent_id == agent_id)
+
+    if tag:
+        stmt = stmt.where(Run.tags.contains(tag))
+        count_stmt = count_stmt.where(Run.tags.contains(tag))
 
     total_result = await session.execute(count_stmt)
     total = total_result.scalar_one()
@@ -125,6 +131,25 @@ async def list_runs(
         runs=[RunResponse.model_validate(r) for r in runs],
         total=total,
     )
+
+
+@router.patch("/{run_id}/tags", response_model=RunResponse)
+async def update_run_tags(
+    run_id: str,
+    payload: RunTagUpdate,
+    session: AsyncSession = Depends(get_session),
+) -> RunResponse:
+    """Update the tags on a run (comma-separated string)."""
+    run = await session.get(Run, run_id)
+    if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Run '{run_id}' not found",
+        )
+    run.tags = payload.tags
+    await session.commit()
+    await session.refresh(run)
+    return RunResponse.model_validate(run)
 
 
 @router.get("/{run_id}", response_model=RunResponse)

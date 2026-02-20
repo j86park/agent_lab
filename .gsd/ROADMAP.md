@@ -114,7 +114,7 @@
 ---
 
 ### Phase 7: Agent Builder QoL
-**Status**: 📋 Planned
+**Status**: 🔄 In Progress
 **Objective**: Add workspace file uploads, persistent workspaces, prompt variables, quick re-run, and run tags to make building and testing agents significantly faster.
 
 **Deliverables**:
