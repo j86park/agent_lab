@@ -29,6 +29,7 @@ class SandboxConfig:
     timeout_seconds: int = 120      # Default command timeout
     network_enabled: bool = True
     working_dir: str = "/workspace"
+    volumes: dict = field(default_factory=dict)  # host_path -> {bind, mode}
 
 
 @dataclass
@@ -89,6 +90,7 @@ class SandboxManager:
                 nano_cpus=int(cfg.cpu_limit * 1e9),
                 mem_limit=cfg.memory_limit,
                 network_disabled=not cfg.network_enabled,
+                volumes=cfg.volumes or None,
                 # Create the working directory on startup
                 entrypoint=[
                     "sh", "-c",

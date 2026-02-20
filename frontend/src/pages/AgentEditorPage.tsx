@@ -2,18 +2,20 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
     ArrowLeft,
-    Paperclip,
-    Save,
-    Trash2,
+    FolderOpen,
     Loader2,
-    AlertCircle,
+    Paperclip,
     Play,
     Download,
+    RefreshCw,
+    Save,
+    Trash2,
     X,
+    AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { agentApi, runApi, skillApi, type Agent, type Skill } from "@/lib/api";
+import { agentApi, runApi, skillApi, type Agent, type Skill, type WorkspaceFile } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
     Card,
@@ -108,6 +110,9 @@ export default function AgentEditorPage() {
     const [isStartingRun, setIsStartingRun] = useState(false);
     const [workspaceFiles, setWorkspaceFiles] = useState<File[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    // Workspace panel state (persistent workspace on server)
+    const [agentWorkspaceFiles, setAgentWorkspaceFiles] = useState<WorkspaceFile[]>([]);
+    const [isLoadingWorkspace, setIsLoadingWorkspace] = useState(false);
     const [exportFormat, setExportFormat] = useState<"python" | "fastapi" | "docker">("python");
     const [isExporting, setIsExporting] = useState(false);
     const [exportOpen, setExportOpen] = useState(false);
@@ -135,6 +140,10 @@ export default function AgentEditorPage() {
         };
 
         fetchData();
+        if (isEditMode && id) {
+            // Load workspace files separately (non-blocking)
+            loadWorkspaceFiles();
+        }
     }, [id, isEditMode]);
 
     const handleInputChange = (field: keyof Agent, value: any) => {
@@ -144,6 +153,31 @@ export default function AgentEditorPage() {
         if (field === "provider") {
             const firstModel = MODELS[value as string]?.[0]?.id || "";
             setFormData((prev) => ({ ...prev, provider: value, model: firstModel }));
+        }
+    };
+
+    const loadWorkspaceFiles = async () => {
+        if (!id) return;
+        setIsLoadingWorkspace(true);
+        try {
+            const result = await agentApi.listAgentWorkspace(id);
+            setAgentWorkspaceFiles(result.files);
+        } catch {
+            // workspace dir may not exist yet — ignore
+        } finally {
+            setIsLoadingWorkspace(false);
+        }
+    };
+
+    const handleDeleteWorkspaceFile = async (filename: string) => {
+        if (!id) return;
+        if (!confirm(`Delete "${filename}" from the workspace? This cannot be undone.`)) return;
+        try {
+            await agentApi.deleteWorkspaceFile(id, filename);
+            toast.success(`Deleted ${filename}`);
+            await loadWorkspaceFiles();
+        } catch (err: any) {
+            toast.error(err.message || "Failed to delete file");
         }
     };
 
@@ -644,6 +678,72 @@ export default function AgentEditorPage() {
                                         <><Play className="mr-2 h-4 w-4" /> Start Run</>
                                     )}
                                 </Button>
+                            </CardContent>
+                        </Card>
+                    {/* Workspace — only for saved agents */}
+                    {isEditMode && (
+                        <Card>
+                            <CardHeader className="pb-3">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <CardTitle className="flex items-center gap-2">
+                                            <FolderOpen className="h-4 w-4" />
+                                            Workspace
+                                            {agentWorkspaceFiles.length > 0 && (
+                                                <span className="text-xs font-normal text-muted-foreground">
+                                                    ({agentWorkspaceFiles.length} file{agentWorkspaceFiles.length !== 1 ? "s" : ""})
+                                                </span>
+                                            )}
+                                        </CardTitle>
+                                        <CardDescription className="mt-1">
+                                            Persistent files available in every run.
+                                        </CardDescription>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={loadWorkspaceFiles}
+                                        disabled={isLoadingWorkspace}
+                                        className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                                        title="Refresh"
+                                    >
+                                        <RefreshCw className={`h-3.5 w-3.5 ${isLoadingWorkspace ? "animate-spin" : ""}`} />
+                                    </button>
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                                {agentWorkspaceFiles.length === 0 ? (
+                                    <p className="text-xs text-muted-foreground italic">
+                                        No workspace files yet. Attach files when starting a run.
+                                    </p>
+                                ) : (
+                                    <ul className="space-y-1">
+                                        {agentWorkspaceFiles.map((f) => (
+                                            <li
+                                                key={f.name}
+                                                className="flex items-center justify-between rounded-md border border-border bg-muted/40 px-2.5 py-1.5 text-xs"
+                                            >
+                                                <span className="font-mono truncate max-w-[150px]" title={f.name}>
+                                                    {f.name}
+                                                </span>
+                                                <span className="text-muted-foreground ml-2 shrink-0">
+                                                    {f.size_bytes < 1024
+                                                        ? `${f.size_bytes} B`
+                                                        : f.size_bytes < 1024 * 1024
+                                                            ? `${(f.size_bytes / 1024).toFixed(1)} KB`
+                                                            : `${(f.size_bytes / 1024 / 1024).toFixed(1)} MB`}
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleDeleteWorkspaceFile(f.name)}
+                                                    className="ml-2 shrink-0 text-muted-foreground hover:text-destructive transition-colors"
+                                                    title="Delete file"
+                                                >
+                                                    <Trash2 className="h-3 w-3" />
+                                                </button>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
                             </CardContent>
                         </Card>
                     )}

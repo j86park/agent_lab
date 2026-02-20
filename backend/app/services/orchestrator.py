@@ -97,17 +97,26 @@ class AgentOrchestrator:
 
                 # ── 5. Create sandbox ──────────────────────────────────────
                 constraints = _json.loads(agent.constraints_config or "{}")
+                agent_workspace_dir = settings.AGENT_WORKSPACES_DIR / agent.id
+                agent_workspace_dir.mkdir(parents=True, exist_ok=True)
                 sandbox_cfg = SandboxConfig(
                     timeout_seconds=constraints.get("timeout_seconds", 120),
                     memory_limit=f"{constraints.get('max_tokens', 512)}m"
                         if "memory_mb" in constraints
                         else "512m",
+                    volumes={
+                        str(agent_workspace_dir.resolve()): {
+                            "bind": "/workspace",
+                            "mode": "rw",
+                        }
+                    },
                 )
                 container_id = await self.sandbox_manager.create_sandbox(sandbox_cfg)
                 await self._log(session, run_id, "info", f"Sandbox created: {container_id}")
-
-                # ── 4b. Inject uploaded workspace files ────────────────────
-                await self._inject_uploaded_files(session, run_id, container_id)
+                await self._log(
+                    session, run_id, "info",
+                    f"Persistent workspace mounted: {agent_workspace_dir}",
+                )
 
                 # ── 6. Get LLM provider ────────────────────────────────────
                 provider = get_provider(agent.provider)

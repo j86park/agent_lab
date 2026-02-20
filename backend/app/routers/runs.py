@@ -175,12 +175,12 @@ async def upload_run_files(
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """
-    Upload files to be injected into the agent's /workspace before the run starts.
+    Upload files into the agent's persistent workspace directory.
 
-    Call this endpoint AFTER creating the run (POST /api/runs) and BEFORE the
-    background orchestrator picks it up. Files are saved to host disk under
-    WORKSPACE_UPLOADS_DIR/{run_id}/ and injected into the sandbox workspace
-    at run execution time.
+    Files land in AGENT_WORKSPACES_DIR/{agent_id}/ which is bind-mounted
+    into /workspace in the sandbox — so they are visible to the agent
+    immediately on the next run (or the current one if uploaded before
+    the orchestrator starts).
 
     Limits: max 10 files, max 10 MB per file.
     """
@@ -197,7 +197,7 @@ async def upload_run_files(
             detail=f"Too many files: max {MAX_UPLOAD_FILES} allowed",
         )
 
-    upload_dir: Path = settings.WORKSPACE_UPLOADS_DIR / run_id
+    upload_dir: Path = settings.AGENT_WORKSPACES_DIR / run.agent_id
     upload_dir.mkdir(parents=True, exist_ok=True)
 
     saved: list[str] = []
@@ -213,6 +213,6 @@ async def upload_run_files(
         async with aiofiles.open(dest, "wb") as f:
             await f.write(content)
         saved.append(filename)
-        logger.info("Uploaded workspace file '%s' for run %s", filename, run_id)
+        logger.info("Uploaded workspace file '%s' for agent %s", filename, run.agent_id)
 
     return {"uploaded": saved}

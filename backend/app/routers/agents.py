@@ -1,11 +1,15 @@
 """Agent Lab — Agent CRUD API routes."""
 
+import os
+from datetime import datetime, UTC
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.database import get_session
 from app.models import Agent
 from app.schemas import AgentCreate, AgentUpdate, AgentResponse, AgentListResponse
@@ -150,3 +154,60 @@ async def export_agent(
         "content": content,
         "format": format,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Workspace endpoints
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/{agent_id}/workspace")
+async def list_workspace_files(
+    agent_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """List files in the agent's persistent workspace directory."""
+    result = await session.execute(select(Agent).where(Agent.id == agent_id))
+    agent = result.scalar_one_or_none()
+    if not agent:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
+
+    workspace_dir: Path = settings.AGENT_WORKSPACES_DIR / agent_id
+    if not workspace_dir.exists():
+        return {"files": []}
+
+    files = []
+    for entry in sorted(workspace_dir.iterdir()):
+        if entry.is_file():
+            stat = entry.stat()
+            files.append({
+                "name": entry.name,
+                "size_bytes": stat.st_size,
+                "modified_at": datetime.fromtimestamp(stat.st_mtime, UTC).isoformat(),
+            })
+
+    return {"files": files}
+
+
+@router.delete("/{agent_id}/workspace/{filename}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_workspace_file(
+    agent_id: str,
+    filename: str,
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """Delete a single file from the agent's persistent workspace."""
+    result = await session.execute(select(Agent).where(Agent.id == agent_id))
+    agent = result.scalar_one_or_none()
+    if not agent:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
+
+    # Prevent path traversal
+    safe_name = Path(filename).name
+    file_path: Path = settings.AGENT_WORKSPACES_DIR / agent_id / safe_name
+
+    if not file_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"File '{safe_name}' not found in workspace",
+        )
+
+    file_path.unlink()
