@@ -4,15 +4,16 @@
 
 ## Current Position
 - **Milestone**: v1.0 — MVP
-- **Phase**: 6 — Polish, Documentation & Launch Prep (planned)
-- **Task**: Planning complete
-- **Status**: Ready for execution
+- **Phase**: 6 — Polish, Documentation & Launch Prep (**complete**)
+- **Task**: All tasks complete
+- **Status**: ✅ Verified — all 6 phases done
 
 ## Last Session Summary
-Phase 5 completed and verified. Phase 6 planned with 3 plans (all wave 1):
-- 6.1: UI polish — 404 page, error boundary, empty state polish
-- 6.2: README + install.sh one-line install script
+Phase 6 executed and completed. 3 plans, all wave 1:
+- 6.1: PI dark theme (index.css, Sidebar, AppLayout), 404 + ErrorBoundary
+- 6.2: README.md (4KB) + install.sh (bash -n verified)
 - 6.3: docs/architecture.md + docs/api-reference.md + docs/troubleshooting.md
 
 ## Next Steps
-1. `/execute 6` — Execute Phase 6
+1. Tag `v1.0.0` release
+2. Push to GitHub
