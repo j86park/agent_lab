@@ -3,7 +3,7 @@
 import os
 from pathlib import Path
 
-from pydantic_settings import BaseSettings
+from typing import Optional
 
 
 class Settings(BaseSettings):
@@ -21,6 +21,9 @@ class Settings(BaseSettings):
 
     # CORS
     FRONTEND_URL: str = "http://localhost:3000"
+
+    # Search
+    tavily_api_key: Optional[str] = None
 
     @property
     def DATABASE_URL(self) -> str:
