@@ -5,12 +5,15 @@ Execution is handled asynchronously via FastAPI BackgroundTasks.
 """
 
 import logging
+from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+import aiofiles
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, UploadFile, File, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.database import get_session
 from app.models import Agent, Run, RunLog
 from app.schemas import RunCreate, RunListResponse, RunLogResponse, RunResponse
@@ -19,6 +22,9 @@ from app.services.orchestrator import AgentOrchestrator
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
+
+MAX_UPLOAD_FILES = 10
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB per file
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -160,3 +166,53 @@ async def delete_run(
 
     await session.delete(run)
     await session.commit()
+
+
+@router.post("/{run_id}/files", status_code=status.HTTP_200_OK)
+async def upload_run_files(
+    run_id: str,
+    files: list[UploadFile] = File(...),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """
+    Upload files to be injected into the agent's /workspace before the run starts.
+
+    Call this endpoint AFTER creating the run (POST /api/runs) and BEFORE the
+    background orchestrator picks it up. Files are saved to host disk under
+    WORKSPACE_UPLOADS_DIR/{run_id}/ and injected into the sandbox workspace
+    at run execution time.
+
+    Limits: max 10 files, max 10 MB per file.
+    """
+    run = await session.get(Run, run_id)
+    if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Run '{run_id}' not found",
+        )
+
+    if len(files) > MAX_UPLOAD_FILES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Too many files: max {MAX_UPLOAD_FILES} allowed",
+        )
+
+    upload_dir: Path = settings.WORKSPACE_UPLOADS_DIR / run_id
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    saved: list[str] = []
+    for upload in files:
+        content = await upload.read()
+        if len(content) > MAX_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"File '{upload.filename}' exceeds 10 MB limit",
+            )
+        filename = Path(upload.filename or "file").name  # strip any path component
+        dest = upload_dir / filename
+        async with aiofiles.open(dest, "wb") as f:
+            await f.write(content)
+        saved.append(filename)
+        logger.info("Uploaded workspace file '%s' for run %s", filename, run_id)
+
+    return {"uploaded": saved}

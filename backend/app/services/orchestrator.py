@@ -7,6 +7,7 @@ execution to run the full agent loop for a given run record.
 from __future__ import annotations
 
 import asyncio
+import aiofiles
 import json
 import logging
 import time
@@ -15,6 +16,7 @@ from datetime import datetime, UTC
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.database import async_session
 from app.models import Agent, Run, RunLog
 from app.services.llm.base import LLMMessage
@@ -103,6 +105,9 @@ class AgentOrchestrator:
                 )
                 container_id = await self.sandbox_manager.create_sandbox(sandbox_cfg)
                 await self._log(session, run_id, "info", f"Sandbox created: {container_id}")
+
+                # ── 4b. Inject uploaded workspace files ────────────────────
+                await self._inject_uploaded_files(session, run_id, container_id)
 
                 # ── 6. Get LLM provider ────────────────────────────────────
                 provider = get_provider(agent.provider)
@@ -231,6 +236,52 @@ class AgentOrchestrator:
     # ─────────────────────────────────────────────────────────────────────────
     # Helpers
     # ─────────────────────────────────────────────────────────────────────────
+
+    async def _inject_uploaded_files(
+        self,
+        session: AsyncSession,
+        run_id: str,
+        container_id: str,
+    ) -> None:
+        """
+        Read any files uploaded for this run from the host upload directory
+        and inject them into the container's /workspace via write_file().
+        Cleans up the upload directory after successful injection.
+        """
+        upload_dir = settings.WORKSPACE_UPLOADS_DIR / run_id
+        if not upload_dir.exists():
+            return
+
+        files = list(upload_dir.iterdir())
+        if not files:
+            return
+
+        injected: list[str] = []
+        for file_path in files:
+            if not file_path.is_file():
+                continue
+            async with aiofiles.open(file_path, "rb") as f:
+                raw = await f.read()
+            try:
+                content = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                # Binary file — encode as latin-1 to preserve bytes through str
+                content = raw.decode("latin-1")
+            await self.sandbox_manager.write_file(
+                container_id,
+                f"/workspace/{file_path.name}",
+                content,
+            )
+            injected.append(file_path.name)
+
+        if injected:
+            await self._log(
+                session, run_id, "info",
+                f"Injected {len(injected)} workspace file(s): {', '.join(injected)}",
+            )
+            # Clean up host upload directory after successful injection
+            import shutil
+            shutil.rmtree(upload_dir, ignore_errors=True)
 
     async def _log(
         self,

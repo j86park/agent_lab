@@ -1,13 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
     ArrowLeft,
+    Paperclip,
     Save,
     Trash2,
     Loader2,
     AlertCircle,
     Play,
     Download,
+    X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -104,6 +106,8 @@ export default function AgentEditorPage() {
     const [error, setError] = useState<string | null>(null);
     const [runTask, setRunTask] = useState("");
     const [isStartingRun, setIsStartingRun] = useState(false);
+    const [workspaceFiles, setWorkspaceFiles] = useState<File[]>([]);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const [exportFormat, setExportFormat] = useState<"python" | "fastapi" | "docker">("python");
     const [isExporting, setIsExporting] = useState(false);
     const [exportOpen, setExportOpen] = useState(false);
@@ -189,6 +193,9 @@ export default function AgentEditorPage() {
         setIsStartingRun(true);
         try {
             const run = await runApi.createRun(id, runTask.trim());
+            if (workspaceFiles.length > 0) {
+                await runApi.uploadRunFiles(run.id, workspaceFiles);
+            }
             toast.success("Run started!");
             navigate(`/runs/${run.id}`);
         } catch (err: any) {
@@ -197,6 +204,26 @@ export default function AgentEditorPage() {
         } finally {
             setIsStartingRun(false);
         }
+    };
+
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const selected = Array.from(e.target.files || []);
+        setWorkspaceFiles((prev) => {
+            const combined = [...prev, ...selected];
+            // deduplicate by name, keep latest
+            const seen = new Set<string>();
+            return combined.filter((f) => {
+                if (seen.has(f.name)) return false;
+                seen.add(f.name);
+                return true;
+            }).slice(0, 10);
+        });
+        // reset so same file can be re-added after removal
+        if (fileInputRef.current) fileInputRef.current.value = "";
+    };
+
+    const removeFile = (name: string) => {
+        setWorkspaceFiles((prev) => prev.filter((f) => f.name !== name));
     };
 
     const handleExport = async () => {
@@ -299,8 +326,8 @@ export default function AgentEditorPage() {
                                                     type="button"
                                                     onClick={() => setExportFormat(value)}
                                                     className={`rounded-lg border p-3 text-left transition-colors ${exportFormat === value
-                                                            ? "border-primary bg-primary/10"
-                                                            : "border-border hover:bg-muted/50"
+                                                        ? "border-primary bg-primary/10"
+                                                        : "border-border hover:bg-muted/50"
                                                         }`}
                                                 >
                                                     <p className="text-sm font-semibold">{label}</p>
@@ -560,15 +587,62 @@ export default function AgentEditorPage() {
                                     onChange={(e) => setRunTask(e.target.value)}
                                     className="min-h-[100px] resize-none text-sm"
                                 />
+
+                                {/* Workspace file attachments */}
+                                <div className="space-y-2">
+                                    <input
+                                        ref={fileInputRef}
+                                        type="file"
+                                        multiple
+                                        className="hidden"
+                                        onChange={handleFileSelect}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => fileInputRef.current?.click()}
+                                        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                                    >
+                                        <Paperclip className="h-3.5 w-3.5" />
+                                        Attach workspace files ({workspaceFiles.length}/10)
+                                    </button>
+                                    {workspaceFiles.length > 0 && (
+                                        <ul className="space-y-1">
+                                            {workspaceFiles.map((f) => (
+                                                <li
+                                                    key={f.name}
+                                                    className="flex items-center justify-between rounded-md border border-border bg-muted/40 px-2.5 py-1 text-xs font-mono"
+                                                >
+                                                    <span className="truncate max-w-[160px]" title={f.name}>
+                                                        {f.name}
+                                                    </span>
+                                                    <span className="text-muted-foreground ml-2 shrink-0">
+                                                        {(f.size / 1024).toFixed(1)} KB
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => removeFile(f.name)}
+                                                        className="ml-2 shrink-0 text-muted-foreground hover:text-destructive transition-colors"
+                                                    >
+                                                        <X className="h-3 w-3" />
+                                                    </button>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                </div>
+
                                 <Button
                                     className="w-full"
                                     onClick={handleStartRun}
                                     disabled={isStartingRun || !runTask.trim()}
                                 >
-                                    {isStartingRun
-                                        ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                        : <Play className="mr-2 h-4 w-4" />}
-                                    {isStartingRun ? "Starting…" : "Start Run"}
+                                    {isStartingRun ? (
+                                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            {workspaceFiles.length > 0 ? "Uploading files…" : "Starting…"}
+                                        </>
+                                    ) : (
+                                        <><Play className="mr-2 h-4 w-4" /> Start Run</>
+                                    )}
                                 </Button>
                             </CardContent>
                         </Card>
