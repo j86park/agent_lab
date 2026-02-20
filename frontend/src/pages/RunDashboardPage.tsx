@@ -8,6 +8,9 @@ import {
     Coins,
     Hash,
     Loader2,
+    Plus,
+    RefreshCw,
+    X,
     XCircle,
 } from "lucide-react";
 
@@ -18,6 +21,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -132,6 +139,16 @@ export default function RunDashboardPage() {
     const [logs, setLogs] = useState<RunLog[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const navigate = useNavigate();
+
+    // Re-run state
+    const [showReRun, setShowReRun] = useState(false);
+    const [reRunTask, setReRunTask] = useState("");
+    const [isReRunning, setIsReRunning] = useState(false);
+
+    // Tags state
+    const [isEditingTags, setIsEditingTags] = useState(false);
+    const [newTag, setNewTag] = useState("");
 
     // Live duration counter
     const [elapsed, setElapsed] = useState<number | null>(null);
@@ -253,6 +270,63 @@ export default function RunDashboardPage() {
         };
     }, [runId]);
 
+    // ─── Actions ─────────────────────────────────────────────────────────────
+
+    const handleReRun = async () => {
+        if (!run || !reRunTask.trim()) return;
+        setIsReRunning(true);
+        try {
+            const newRun = await runApi.createRun(run.agent_id, reRunTask.trim(), undefined, run.tags);
+            toast.success("New run started");
+            navigate(`/runs/${newRun.id}`);
+        } catch (err: any) {
+            toast.error(err.message || "Failed to start re-run");
+        } finally {
+            setIsReRunning(false);
+        }
+    };
+
+    const handleAddTag = async () => {
+        if (!run || !newTag.trim()) {
+            setIsEditingTags(false);
+            return;
+        }
+        const tag = newTag.trim();
+        const existing = run.tags ? run.tags.split(",").map(t => t.trim()) : [];
+        if (existing.includes(tag)) {
+            setNewTag("");
+            setIsEditingTags(false);
+            return;
+        }
+
+        const updatedTags = [...existing, tag].join(",");
+        try {
+            const updatedRun = await runApi.updateRunTags(run.id, updatedTags);
+            setRun(updatedRun);
+            setNewTag("");
+        } catch (err: any) {
+            toast.error(err.message || "Failed to add tag");
+        } finally {
+            setIsEditingTags(false);
+        }
+    };
+
+    const handleRemoveTag = async (tagToRemove: string) => {
+        if (!run || !run.tags) return;
+        const updatedTags = run.tags
+            .split(",")
+            .map(t => t.trim())
+            .filter(t => t !== tagToRemove)
+            .join(",");
+
+        try {
+            const updatedRun = await runApi.updateRunTags(run.id, updatedTags || null);
+            setRun(updatedRun);
+        } catch (err: any) {
+            toast.error(err.message || "Failed to remove tag");
+        }
+    };
+
     // ─── Derived stats ────────────────────────────────────────────────────────
     // Parse cumulative cost/tokens from log metadata if run not yet finalized
     const liveCost = run?.cost ?? (() => {
@@ -308,12 +382,100 @@ export default function RunDashboardPage() {
                             <h1 className="text-2xl font-bold">Run Dashboard</h1>
                             <StatusBadge status={run.status} />
                         </div>
-                        <p className="text-xs text-muted-foreground font-mono mt-0.5">
-                            ID: {run.id}
-                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                            <p className="text-xs text-muted-foreground font-mono">
+                                ID: {run.id}
+                            </p>
+                            <div className="flex items-center gap-1.5 ml-2">
+                                {run.tags?.split(",").filter(t => t.trim()).map(tag => (
+                                    <Badge key={tag} variant="outline" className="text-[10px] py-0 px-1.5 h-4 gap-1 group">
+                                        {tag}
+                                        <button
+                                            onClick={() => handleRemoveTag(tag)}
+                                            className="hover:text-destructive text-muted-foreground/50 transition-colors"
+                                        >
+                                            <X className="h-2.5 w-2.5" />
+                                        </button>
+                                    </Badge>
+                                ))}
+                                {isEditingTags ? (
+                                    <Input
+                                        autoFocus
+                                        className="h-5 w-24 text-[10px] py-0 px-1.5"
+                                        placeholder="Tag..."
+                                        value={newTag}
+                                        onChange={(e) => setNewTag(e.target.value)}
+                                        onBlur={handleAddTag}
+                                        onKeyDown={(e) => {
+                                            if (e.key === "Enter") handleAddTag();
+                                            if (e.key === "Escape") setIsEditingTags(false);
+                                        }}
+                                    />
+                                ) : (
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-4 px-1.5 text-[10px] text-muted-foreground hover:text-foreground gap-1"
+                                        onClick={() => setIsEditingTags(true)}
+                                    >
+                                        <Plus className="h-2.5 w-2.5" />
+                                        Add tag
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
                     </div>
                 </div>
+                <div className="flex items-center gap-2">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-2"
+                        onClick={() => {
+                            setReRunTask(run.task);
+                            setShowReRun(!showReRun);
+                        }}
+                    >
+                        <RefreshCw className={`h-4 w-4 ${showReRun ? "text-primary" : ""}`} />
+                        Re-run
+                    </Button>
+                </div>
             </div>
+
+            {/* ── Re-run Panel ── */}
+            {showReRun && (
+                <Card className="border-primary/20 bg-primary/5">
+                    <CardContent className="pt-4 space-y-4">
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Modify Task for Re-run</label>
+                            <Textarea
+                                value={reRunTask}
+                                onChange={(e) => setReRunTask(e.target.value)}
+                                placeholder="Enter task description..."
+                                className="min-h-[100px] bg-background"
+                            />
+                        </div>
+                        <div className="flex justify-end gap-2">
+                            <Button variant="ghost" size="sm" onClick={() => setShowReRun(false)}>
+                                Cancel
+                            </Button>
+                            <Button
+                                size="sm"
+                                onClick={handleReRun}
+                                disabled={isReRunning || !reRunTask.trim()}
+                                className="gap-2"
+                            >
+                                {isReRunning ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                    <RefreshCw className="h-4 w-4" />
+                                )}
+                                Start New Run
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
 
             {/* ── Task Description ── */}
             <Card>

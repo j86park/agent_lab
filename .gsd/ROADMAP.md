@@ -5,17 +5,17 @@
 
 ## Must-Haves (from SPEC)
 
-- [ ] Docker Compose one-command deployment
-- [ ] Agent configuration UI (prompt, tools, constraints, file upload)
-- [ ] Sandboxed agent execution in Docker containers
-- [ ] Multi-provider LLM support (OpenAI, Anthropic, OpenRouter, Ollama)
-- [ ] Real-time log streaming via WebSocket
-- [ ] Run history with filtering
-- [ ] Side-by-side run comparison
-- [ ] Export (Python script, FastAPI app, Docker container)
-- [ ] Built-in templates
-- [ ] Modular Skills system (GSD pattern)
-- [ ] Cost and token tracking
+- [x] Docker Compose one-command deployment
+- [x] Agent configuration UI (prompt, tools, constraints, file upload)
+- [x] Sandboxed agent execution in Docker containers
+- [x] Multi-provider LLM support (OpenAI, Anthropic, OpenRouter, Ollama)
+- [x] Real-time log streaming via WebSocket
+- [x] Run history with filtering
+- [x] Side-by-side run comparison
+- [x] Export (Python script, FastAPI app, Docker container)
+- [x] Built-in templates
+- [x] Modular Skills system (GSD pattern)
+- [x] Cost and token tracking
 
 ---
 
@@ -114,7 +114,7 @@
 ---
 
 ### Phase 7: Agent Builder QoL
-**Status**: 🔄 In Progress
+**Status**: ✅ Complete
 **Objective**: Add workspace file uploads, persistent workspaces, prompt variables, quick re-run, and run tags to make building and testing agents significantly faster.
 
 **Deliverables**:

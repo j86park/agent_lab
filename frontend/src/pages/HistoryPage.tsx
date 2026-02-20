@@ -11,6 +11,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import {
     Table,
     TableBody,
@@ -27,6 +28,7 @@ import {
     RefreshCw,
     ChevronLeft,
     ChevronRight,
+    Tag,
 } from "lucide-react";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -96,6 +98,7 @@ export default function HistoryPage() {
     // Filters
     const [statusFilter, setStatusFilter] = useState<string>("all");
     const [agentFilter, setAgentFilter] = useState<string>("all");
+    const [tagFilter, setTagFilter] = useState<string>("");
     const [page, setPage] = useState(0);
 
     // Comparison selection (max 2)
@@ -116,7 +119,7 @@ export default function HistoryPage() {
         setLoading(true);
         try {
             const agentId = agentFilter !== "all" ? agentFilter : undefined;
-            const res = await runApi.listRuns(agentId, page * PAGE_SIZE, PAGE_SIZE);
+            const res = await runApi.listRuns(agentId, page * PAGE_SIZE, PAGE_SIZE, tagFilter || undefined);
             // client-side status filter (API doesn't support it yet)
             const filtered =
                 statusFilter === "all"
@@ -129,7 +132,7 @@ export default function HistoryPage() {
         } finally {
             setLoading(false);
         }
-    }, [agentFilter, statusFilter, page]);
+    }, [agentFilter, statusFilter, page, tagFilter]);
 
     useEffect(() => {
         loadAgents();
@@ -137,7 +140,7 @@ export default function HistoryPage() {
 
     useEffect(() => {
         setPage(0);
-    }, [statusFilter, agentFilter]);
+    }, [statusFilter, agentFilter, tagFilter]);
 
     useEffect(() => {
         loadRuns();
@@ -242,6 +245,17 @@ export default function HistoryPage() {
                         ))}
                     </SelectContent>
                 </Select>
+
+                <div className="relative">
+                    <SelectTrigger className="w-[100px] h-9 absolute left-0 opacity-0 pointer-events-none" /> {/* Spacer for consistent layout if needed */}
+                    <Input
+                        placeholder="Filter by tag..."
+                        className="w-[200px] h-9 pl-8"
+                        value={tagFilter}
+                        onChange={(e) => setTagFilter(e.target.value)}
+                    />
+                    <Tag className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                </div>
 
                 {selected.size > 0 && (
                     <p className="text-sm text-muted-foreground self-center">
