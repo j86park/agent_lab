@@ -110,3 +110,16 @@
 - `docs/troubleshooting.md` — Common issues
 - Install script (`install.sh`)
 - End-to-end testing of all user flows
+
+---
+
+### Phase 7: Agent Builder QoL
+**Status**: 📋 Planned
+**Objective**: Add workspace file uploads, persistent workspaces, prompt variables, quick re-run, and run tags to make building and testing agents significantly faster.
+
+**Deliverables**:
+- Workspace file uploads: attach files to a run, mounted into `/workspace` before execution
+- Persistent agent workspace: host-side directory per agent, survives between runs
+- Prompt variables: `{{variable}}` placeholders in system prompts, resolved at run time via UI form
+- Quick Re-Run: button on RunDashboardPage to pre-fill and re-launch a run
+- Run tags: label runs and filter History by tag
