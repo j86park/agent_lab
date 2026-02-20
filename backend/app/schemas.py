@@ -120,6 +120,7 @@ class RunCreate(BaseModel):
     """Schema for creating and starting a new agent run."""
     agent_id: str
     task: str = Field(..., min_length=1, description="The user's task description")
+    variable_values: Optional[dict[str, str]] = None  # {{var}} substitution values
 
 
 class RunResponse(BaseModel):
@@ -132,6 +133,7 @@ class RunResponse(BaseModel):
     total_tokens: Optional[int] = None
     duration_seconds: Optional[float] = None
     error_message: Optional[str] = None
+    resolved_prompt: Optional[str] = None
     created_at: datetime
     completed_at: Optional[datetime] = None
 

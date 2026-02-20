@@ -82,6 +82,23 @@ class AgentOrchestrator:
             try:
                 # ── 3. Build system prompt ─────────────────────────────────
                 system_prompt = await build_system_prompt(agent.id, session)
+                # If prompt variables were resolved at run creation time, use the
+                # resolved version as the system message (variables substituted).
+                if run.resolved_prompt:
+                    # Replace the raw agent.system_prompt portion with resolved_prompt.
+                    # build_system_prompt() prepends the agent prompt then appends skills;
+                    # we swap only the agent prompt section by rebuilding if needed.
+                    if agent.system_prompt and agent.system_prompt in system_prompt:
+                        system_prompt = system_prompt.replace(
+                            agent.system_prompt, run.resolved_prompt, 1
+                        )
+                    else:
+                        # Fallback: prepend resolved prompt to existing system_prompt
+                        system_prompt = run.resolved_prompt + "\n\n" + system_prompt
+                    await self._log(
+                        session, run_id, "info",
+                        "Using resolved prompt (variable substitution applied)",
+                    )
                 await self._log(
                     session, run_id, "info",
                     f"System prompt built ({len(system_prompt)} chars)",

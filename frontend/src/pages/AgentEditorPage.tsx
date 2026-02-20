@@ -113,6 +113,8 @@ export default function AgentEditorPage() {
     // Workspace panel state (persistent workspace on server)
     const [agentWorkspaceFiles, setAgentWorkspaceFiles] = useState<WorkspaceFile[]>([]);
     const [isLoadingWorkspace, setIsLoadingWorkspace] = useState(false);
+    // Prompt variable detection
+    const [variableValues, setVariableValues] = useState<Record<string, string>>({});
     const [exportFormat, setExportFormat] = useState<"python" | "fastapi" | "docker">("python");
     const [isExporting, setIsExporting] = useState(false);
     const [exportOpen, setExportOpen] = useState(false);
@@ -219,6 +221,14 @@ export default function AgentEditorPage() {
         }
     };
 
+    /** Extract unique {{variable}} names from a prompt template. */
+    const extractVariables = (prompt: string): string[] => {
+        const matches = [...prompt.matchAll(/\{\{([^}]+)\}\}/g)];
+        return [...new Set(matches.map((m) => m[1].trim()))];
+    };
+
+    const detectedVars = extractVariables(formData.system_prompt ?? "");
+
     const handleStartRun = async () => {
         if (!id || !runTask.trim()) {
             toast.error("Please enter a task description");
@@ -226,7 +236,8 @@ export default function AgentEditorPage() {
         }
         setIsStartingRun(true);
         try {
-            const run = await runApi.createRun(id, runTask.trim());
+            const varPayload = detectedVars.length > 0 ? variableValues : undefined;
+            const run = await runApi.createRun(id, runTask.trim(), varPayload);
             if (workspaceFiles.length > 0) {
                 await runApi.uploadRunFiles(run.id, workspaceFiles);
             }
@@ -614,6 +625,28 @@ export default function AgentEditorPage() {
                                 <CardDescription>Start a new agent run with a task.</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-3">
+                                {/* Template variable inputs — only shown when {{vars}} detected */}
+                                {detectedVars.length > 0 && (
+                                    <div className="space-y-2 rounded-md border border-border bg-muted/40 p-3">
+                                        <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                                            <span className="font-mono text-[11px] bg-primary/10 text-primary px-1.5 py-0.5 rounded">{"{{…}}"}</span>
+                                            Template Variables
+                                        </p>
+                                        {detectedVars.map((varName) => (
+                                            <div key={varName} className="space-y-1">
+                                                <label className="text-xs text-muted-foreground font-mono">{`{{${varName}}}`}</label>
+                                                <Input
+                                                    placeholder={`Value for ${varName}`}
+                                                    value={variableValues[varName] ?? ""}
+                                                    onChange={(e) =>
+                                                        setVariableValues((prev) => ({ ...prev, [varName]: e.target.value }))
+                                                    }
+                                                    className="h-8 text-sm"
+                                                />
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                                 <Textarea
                                     id="run-task"
                                     placeholder="Describe the task for this agent…"

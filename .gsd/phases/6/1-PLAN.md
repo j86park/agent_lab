@@ -4,7 +4,7 @@ plan: 1
 wave: 1
 ---
 
-# Plan 6.1: PrimeIntellect-Inspired UI Redesign + Error Hardening
+# Plan 6.1: UI Redesign + Error Hardening
 
 ## Objective
 Overhaul the entire visual theme to match PrimeIntellect's ultra-dark, sharp, minimal aesthetic (white/off-white primary, near-zero border radius, monospace accents, hairline borders). Then add a 404 page and error boundary for resilience.

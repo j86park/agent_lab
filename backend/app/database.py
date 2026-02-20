@@ -35,6 +35,19 @@ async def get_session():
 async def init_db() -> None:
     """Create all database tables from model metadata."""
     from app.models import Base  # noqa: F811
+    from sqlalchemy import text
+    from sqlalchemy.exc import OperationalError
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    # Additive migrations — safe to run on every startup
+    migrations = [
+        "ALTER TABLE runs ADD COLUMN resolved_prompt TEXT",
+    ]
+    async with engine.begin() as conn:
+        for stmt in migrations:
+            try:
+                await conn.execute(text(stmt))
+            except OperationalError:
+                pass  # column already exists
