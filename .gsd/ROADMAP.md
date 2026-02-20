@@ -123,3 +123,16 @@
 - Prompt variables: `{{variable}}` placeholders in system prompts, resolved at run time via UI form
 - Quick Re-Run: button on RunDashboardPage to pre-fill and re-launch a run
 - Run tags: label runs and filter History by tag
+
+---
+
+### Phase 8: Web Search Integration
+**Status**: ✅ Complete
+**Objective**: Transform the current `web_search` tool from a placeholder stub into a fully functional search service that the AI agent can use to browse the internet.
+**Requirements**: REQ-08 (Tool execution), NEW (Web Search capability)
+
+**Deliverables**:
+- Secure search API integration (Tavily)
+- Centralized search service with error handling
+- Clean search result formatting for LLM context
+- Configurable API keys via environment variables
