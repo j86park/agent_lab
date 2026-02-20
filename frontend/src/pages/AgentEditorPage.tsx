@@ -680,6 +680,8 @@ export default function AgentEditorPage() {
                                 </Button>
                             </CardContent>
                         </Card>
+                    )}
+
                     {/* Workspace — only for saved agents */}
                     {isEditMode && (
                         <Card>
