@@ -1,0 +1,13 @@
+services:
+  backend:
+    volumes:
+      - ./backend:/app
+    environment:
+      - AGENT_LAB_DATA_DIR=/app/data
+    restart: "no"
+
+  frontend:
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    restart: "no"
