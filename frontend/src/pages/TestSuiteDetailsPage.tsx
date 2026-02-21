@@ -9,6 +9,9 @@ import {
     AlertCircle,
     Play,
     Terminal,
+    ShieldCheck,
+    RefreshCw,
+    ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -47,6 +50,29 @@ const EMPTY_FORM: CaseFormData = {
     expected_behavior: "",
     rubric: "",
 };
+
+function EvaluationBadge({ score }: { score: number | null | undefined }) {
+    if (score === null || score === undefined) return null;
+
+    let colorClass = "text-amber-400 border-amber-400/30 bg-amber-400/10";
+    let label = "Partial";
+
+    if (score >= 0.9) {
+        colorClass = "text-green-400 border-green-400/30 bg-green-400/10";
+        label = "Pass";
+    } else if (score <= 0.1) {
+        colorClass = "text-red-400 border-red-400/30 bg-red-400/10";
+        label = "Fail";
+    }
+
+    return (
+        <Badge variant="secondary" className={`gap-1 font-mono text-[9px] h-5 ${colorClass}`}>
+            <ShieldCheck className="h-3 w-3" />
+            <span>{(score * 100).toFixed(0)}%</span>
+            <span className="opacity-70">{label}</span>
+        </Badge>
+    );
+}
 
 export default function TestSuiteDetailsPage() {
     const { id } = useParams<{ id: string }>();
@@ -230,6 +256,15 @@ export default function TestSuiteDetailsPage() {
                         <Button
                             variant="outline"
                             size="sm"
+                            onClick={fetchData}
+                            disabled={isLoading}
+                            className="text-muted-foreground"
+                        >
+                            <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
                             onClick={handleRunBatch}
                             disabled={isRunningBatch || cases.length === 0}
                         >
@@ -283,6 +318,18 @@ export default function TestSuiteDetailsPage() {
                                         <CardTitle className="text-base font-mono">
                                             {testCase.task}
                                         </CardTitle>
+                                        <div className="flex items-center gap-2 mt-2">
+                                            <EvaluationBadge score={testCase.last_run_score} />
+                                            {testCase.last_run_id && (
+                                                <Link
+                                                    to={`/runs/${testCase.last_run_id}`}
+                                                    className="flex items-center gap-1 text-[10px] text-primary hover:underline"
+                                                >
+                                                    <ExternalLink className="h-3 w-3" />
+                                                    Latest Run
+                                                </Link>
+                                            )}
+                                        </div>
                                     </div>
                                     <div className="flex shrink-0 gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                         <Button

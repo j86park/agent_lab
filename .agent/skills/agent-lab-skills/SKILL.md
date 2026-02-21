@@ -357,3 +357,21 @@ function useWebSocket(url: string) {
 6. **WebSocket messages use JSON format** with a `type` field for message discrimination
 7. **File uploads are validated** — check file size, type, and sanitize names before storage
 8. **All user-facing errors return structured JSON** — `{"error": "message", "detail": "..."}`
+---
+
+## Environment & Shell — PowerShell (Windows)
+
+**Rules:**
+- **NEVER use `&&` for command chaining** — most versions of PowerShell (including the user's) do not support it and will throw a `ParserError`.
+- Use `;` (semicolon) for unconditional sequential execution.
+- Use `$?;` for conditional execution (equivalent to `&&`) if the previous command SUCCESS is mandatory.
+- Prefer separate `run_command` calls for multi-step operations to improve error visibility and reliability.
+
+**Patterns:**
+```powershell
+# ✅ Correct
+git add .; git commit -m "update"
+
+# ❌ Wrong
+git add . && git commit -m "update"
+```

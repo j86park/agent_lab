@@ -12,6 +12,8 @@ import {
     RefreshCw,
     X,
     XCircle,
+    Activity,
+    ShieldCheck,
 } from "lucide-react";
 
 import { runApi, type Run, type RunLog } from "@/lib/api";
@@ -94,6 +96,29 @@ function StatusBadge({ status }: { status: Run["status"] }) {
         <Badge variant="destructive" className="gap-1.5">
             <XCircle className="h-3.5 w-3.5" />
             Failed
+        </Badge>
+    );
+}
+
+function EvaluationBadge({ score }: { score: number | null }) {
+    if (score === null) return null;
+
+    let colorClass = "text-amber-400 border-amber-400/30 bg-amber-400/10";
+    let label = "Partial";
+
+    if (score >= 0.9) {
+        colorClass = "text-green-400 border-green-400/30 bg-green-400/10";
+        label = "Pass";
+    } else if (score <= 0.1) {
+        colorClass = "text-red-400 border-red-400/30 bg-red-400/10";
+        label = "Fail";
+    }
+
+    return (
+        <Badge variant="secondary" className={`gap-1.5 ${colorClass}`}>
+            <ShieldCheck className="h-3.5 w-3.5" />
+            <span className="font-bold">{(score * 100).toFixed(0)}%</span>
+            <span>{label}</span>
         </Badge>
     );
 }
@@ -503,6 +528,32 @@ export default function RunDashboardPage() {
                     value={formatTokens(run.total_tokens)}
                 />
             </div>
+
+            {/* ── Evaluation Section ── */}
+            {(run.eval_score !== null || run.eval_feedback) && (
+                <Card className="border-primary/20 bg-primary/5">
+                    <CardHeader className="pb-2">
+                        <div className="flex items-center justify-between">
+                            <CardTitle className="text-sm font-medium flex items-center gap-2">
+                                <Activity className="h-4 w-4 text-primary" />
+                                LLM-as-a-Judge Evaluation
+                            </CardTitle>
+                            <EvaluationBadge score={run.eval_score} />
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                        {run.eval_feedback ? (
+                            <div className="text-sm text-slate-300 bg-background/50 p-3 rounded border border-primary/10 italic">
+                                "{run.eval_feedback}"
+                            </div>
+                        ) : (
+                            <div className="text-sm text-muted-foreground italic">
+                                No feedback provided.
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+            )}
 
             {/* ── Failed Error ── */}
             {run.status === "failed" && run.error_message && (

@@ -6,7 +6,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session, async_session
-from app.models import TestSuite, TestCase
+from app.models import TestSuite, TestCase, Run
 from app.services.test_suite_service import run_suite_background
 from app.schemas import (
     TestSuiteCreate,
@@ -168,13 +168,34 @@ async def create_test_case(
 async def list_test_cases(
     suite_id: str, session: AsyncSession = Depends(get_session)
 ):
-    """List all test cases in a suite."""
+    """List all test cases in a suite, including latest evaluation results."""
+    # 1. Fetch cases
     stmt = select(TestCase).where(TestCase.suite_id == suite_id).order_by(TestCase.created_at.asc())
     result = await session.execute(stmt)
     cases = result.scalars().all()
 
-    # Simple count from result length (cases are usually few)
-    return {"cases": cases, "total": len(cases)}
+    # 2. Fetch latest run for each case
+    resp_cases = []
+    for case in cases:
+        run_stmt = (
+            select(Run)
+            .where(Run.test_case_id == case.id)
+            .order_by(Run.created_at.desc())
+            .limit(1)
+        )
+        run_result = await session.execute(run_stmt)
+        latest_run = run_result.scalar_one_or_none()
+
+        # Create response object and inject fields
+        c_resp = TestCaseResponse.model_validate(case)
+        if latest_run:
+            c_resp.last_run_id = latest_run.id
+            c_resp.last_run_score = latest_run.eval_score
+            c_resp.last_run_status = latest_run.status
+        
+        resp_cases.append(c_resp)
+    
+    return {"cases": resp_cases, "total": len(resp_cases)}
 
 
 @router.put("/cases/{case_id}", response_model=TestCaseResponse)

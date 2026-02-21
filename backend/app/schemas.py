@@ -186,6 +186,9 @@ class TestCaseResponse(TestCaseBase):
     """Schema for test case response."""
     id: str
     suite_id: str
+    last_run_id: Optional[str] = None
+    last_run_score: Optional[float] = None
+    last_run_status: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
