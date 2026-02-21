@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import init_db
 from app.routers.agents import router as agents_router
+from app.routers.analytics import router as analytics_router
 from app.routers.metadata import router as metadata_router
 from app.routers.runs import router as runs_router
 from app.routers.settings import router as settings_router
@@ -46,6 +47,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(agents_router)
+app.include_router(analytics_router)
 app.include_router(metadata_router)
 app.include_router(runs_router)
 app.include_router(skills_router)

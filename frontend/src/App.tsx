@@ -11,6 +11,7 @@ import SkillsPage from "./pages/SkillsPage";
 import SettingsPage from "./pages/SettingsPage";
 import TestSuitesPage from "@/pages/TestSuitesPage";
 import TestSuiteDetailsPage from "@/pages/TestSuiteDetailsPage";
+import AnalyticsPage from "./pages/AnalyticsPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -24,6 +25,7 @@ function App() {
             <Route path="/agents/new" element={<AgentEditorPage />} />
             <Route path="/agents/:id" element={<AgentEditorPage />} />
             <Route path="/runs/:id" element={<RunDashboardPage />} />
+            <Route path="/analytics" element={<AnalyticsPage />} />
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/history/compare" element={<CompareRunsPage />} />
             <Route path="/templates" element={<TemplatesPage />} />

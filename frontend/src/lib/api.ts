@@ -283,6 +283,48 @@ export const metadataApi = {
         fetchApi<{ models: ModelMetadata[] }>("/api/metadata/models"),
 };
 
+// --- Analytics API ---
+
+export interface AnalyticsSummary {
+    total_runs: number;
+    total_cost: number;
+    total_tokens: number;
+    success_rate: number;
+    most_active_agent: string;
+}
+
+export interface AgentAnalytics {
+    agent_name: string;
+    total_runs: number;
+    success_rate: number;
+    total_cost: number;
+    avg_cost: number;
+    total_tokens: number;
+    avg_tokens: number;
+    trend: Array<{ date: string; runs: number; cost: number }>;
+}
+
+export interface AgentPerformance {
+    agent_id: string;
+    agent_name: string;
+    provider: string;
+    total_runs: number;
+    total_cost: number;
+    total_tokens: number;
+    success_rate: number;
+}
+
+export const analyticsApi = {
+    getSummary: () =>
+        fetchApi<AnalyticsSummary>("/api/analytics/summary"),
+
+    getAgentAnalytics: (agentId: string) =>
+        fetchApi<AgentAnalytics>(`/api/analytics/agents/${agentId}`),
+
+    getAllAgentsAnalytics: () =>
+        fetchApi<{ agents: AgentPerformance[] }>("/api/analytics/agents"),
+};
+
 // --- Run Types ---
 
 export interface Run {
