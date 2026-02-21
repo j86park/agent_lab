@@ -1,12 +1,13 @@
 """Agent Lab — Test Suites & Test Cases CRUD API routes."""
 
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_session
+from app.database import get_session, async_session
 from app.models import TestSuite, TestCase
+from app.services.test_suite_service import run_suite_background
 from app.schemas import (
     TestSuiteCreate,
     TestSuiteUpdate,
@@ -113,6 +114,28 @@ async def delete_suite(suite_id: str, session: AsyncSession = Depends(get_sessio
     await session.delete(suite)
     await session.commit()
     return None
+
+
+@router.post("/{suite_id}/run", status_code=status.HTTP_202_ACCEPTED)
+async def run_suite(
+    suite_id: str,
+    background_tasks: BackgroundTasks,
+    session: AsyncSession = Depends(get_session)
+):
+    """Trigger a background batch execution for the entire suite."""
+    # Verify suite exists
+    result = await session.execute(select(TestSuite).where(TestSuite.id == suite_id))
+    suite = result.scalar_one_or_none()
+    if not suite:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Test suite not found"
+        )
+    
+    # Trigger background task
+    # We pass the async_session factory so the background task can manage its own sessions
+    background_tasks.add_task(run_suite_background, suite_id, async_session)
+    
+    return {"message": f"Suite execution triggered for '{suite.name}'"}
 
 
 # --- Test Case Endpoints ---

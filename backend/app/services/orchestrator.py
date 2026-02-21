@@ -18,12 +18,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import async_session
-from app.models import Agent, Run, RunLog
 from app.services.llm.base import LLMMessage
 from app.services.llm.factory import get_provider
 from app.services.sandbox import SandboxConfig, SandboxManager
 from app.services.skills_injector import build_system_prompt
 from app.services.tools import execute_tool, get_tool_definitions, AVAILABLE_TOOLS
+from app.services.evaluator import EvaluationService
+from app.models import Agent, Run, RunLog, TestCase
 
 logger = logging.getLogger(__name__)
 
@@ -248,6 +249,31 @@ class AgentOrchestrator:
                     f"Run completed in {duration:.1f}s — "
                     f"total tokens: {run.total_tokens}, cost: ${run.cost:.6f}",
                 )
+
+                # ── 8.5. Automated Evaluation ──────────────────────────────
+                if run.test_case_id:
+                    await self._log(session, run_id, "info", "Starting automated evaluation...")
+                    test_case = await session.get(TestCase, run.test_case_id)
+                    if test_case:
+                        # Fetch all logs for this run
+                        stmt = select(RunLog).where(RunLog.run_id == run_id).order_by(RunLog.timestamp.asc())
+                        log_result = await session.execute(stmt)
+                        run_logs = log_result.scalars().all()
+
+                        evaluator = EvaluationService()
+                        eval_result = await evaluator.evaluate_run(run, test_case, run_logs)
+                        
+                        run.eval_score = eval_result["score"]
+                        run.eval_feedback = eval_result["feedback"]
+                        await session.commit()
+                        
+                        await self._log(
+                            session, run_id, "info", 
+                            f"Evaluation complete: score={run.eval_score}",
+                            metadata=eval_result
+                        )
+                    else:
+                        await self._log(session, run_id, "warning", f"Test case {run.test_case_id} not found for evaluation")
 
             except Exception as exc:
                 logger.exception("Run %s failed: %s", run_id, exc)

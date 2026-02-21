@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     # Search
     tavily_api_key: Optional[str] = None
 
+    # LLM Keys
+    openrouter_key: Optional[str] = None
+
     @property
     def DATABASE_URL(self) -> str:
         """SQLite database URL for async driver."""
@@ -61,6 +64,11 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore"
     )
+
+    @property
+    def OPENROUTER_API_KEY(self) -> str:
+        """Return OpenRouter API key from env or settings."""
+        return os.getenv("OPENROUTER_KEY") or self.openrouter_key or ""
 
 
 # Singleton settings instance

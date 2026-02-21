@@ -9,6 +9,8 @@ import CompareRunsPage from "./pages/CompareRunsPage";
 import TemplatesPage from "./pages/TemplatesPage";
 import SkillsPage from "./pages/SkillsPage";
 import SettingsPage from "./pages/SettingsPage";
+import TestSuitesPage from "@/pages/TestSuitesPage";
+import TestSuiteDetailsPage from "@/pages/TestSuiteDetailsPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -27,6 +29,8 @@ function App() {
             <Route path="/templates" element={<TemplatesPage />} />
             <Route path="/skills" element={<SkillsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/test-suites" element={<TestSuitesPage />} />
+            <Route path="/test-suites/:id" element={<TestSuiteDetailsPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Route>
         </Routes>
