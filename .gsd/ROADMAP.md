@@ -160,3 +160,14 @@
 - **Live Prompt Preview**: Real-time view of the fully resolved system prompt (including skills and variables).
 - **Model Picker with Cost Estimator**: Per-model pricing display and pre-run cost warning based on constraints.
 - **Analytics Dashboard**: Aggregate metrics (success rate, avg cost/tokens) per agent over time.
+---
+
+### Phase 11: Codebase Hygiene
+**Status**: 📋 Planned
+**Objective**: Refactor and clean the codebase to eliminate technical debt, remove unused code, and align with senior engineering standards.
+
+**Deliverables**:
+- **Audit Reports**: Identify unused imports, dead functions, and orphaned files.
+- **Service Layer Abstraction**: Standardize Controller/Service pattern in backend.
+- **Frontend Standardisation**: Separation of UI/Container components and utility consolidation.
+- **Type Cleanup**: Eliminate `any` types and complete TypeScript interfaces.
