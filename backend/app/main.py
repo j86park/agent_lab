@@ -11,6 +11,8 @@ from app.routers.agents import router as agents_router
 from app.routers.runs import router as runs_router
 from app.routers.settings import router as settings_router
 from app.routers.skills import router as skills_router
+from app.routers.snippets import router as snippets_router
+from app.routers.test_suites import router as suites_router
 from app.routers.ws import router as ws_router
 
 
@@ -45,6 +47,8 @@ app.add_middleware(
 app.include_router(agents_router)
 app.include_router(runs_router)
 app.include_router(skills_router)
+app.include_router(snippets_router)
+app.include_router(suites_router)
 app.include_router(settings_router)
 app.include_router(ws_router)
 

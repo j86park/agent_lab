@@ -12,11 +12,13 @@ import {
     Trash2,
     X,
     AlertCircle,
+    BookTemplate,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { agentApi, runApi, skillApi, type Agent, type Skill, type WorkspaceFile } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { PromptLibrary } from "@/components/PromptLibrary";
 import {
     Card,
     CardContent,
@@ -118,6 +120,8 @@ export default function AgentEditorPage() {
     const [exportFormat, setExportFormat] = useState<"python" | "fastapi" | "docker">("python");
     const [isExporting, setIsExporting] = useState(false);
     const [exportOpen, setExportOpen] = useState(false);
+    const [isLibraryOpen, setIsLibraryOpen] = useState(false);
+    const systemPromptRef = useRef<HTMLTextAreaElement>(null);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -290,6 +294,31 @@ export default function AgentEditorPage() {
         } finally {
             setIsExporting(false);
         }
+    };
+
+    const handleInsertSnippet = (content: string) => {
+        const textarea = systemPromptRef.current;
+        if (!textarea) {
+            // Fallback if ref isn't available
+            handleInputChange("system_prompt", (formData.system_prompt || "") + "\n" + content);
+            return;
+        }
+
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const text = formData.system_prompt || "";
+        const before = text.substring(0, start);
+        const after = text.substring(end);
+        const newValue = before + content + after;
+
+        handleInputChange("system_prompt", newValue);
+
+        // Defer focus and cursor position update
+        setTimeout(() => {
+            textarea.focus();
+            const newPos = start + content.length;
+            textarea.setSelectionRange(newPos, newPos);
+        }, 0);
     };
 
     if (isLoading) {
@@ -465,13 +494,25 @@ export default function AgentEditorPage() {
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="prompt">System Prompt</Label>
-                                <Textarea
-                                    id="prompt"
-                                    className="min-h-[200px] font-mono text-sm"
-                                    placeholder="You are an expert in..."
-                                    value={formData.system_prompt}
-                                    onChange={(e) => handleInputChange("system_prompt", e.target.value)}
-                                />
+                                <div className="relative">
+                                    <Textarea
+                                        id="prompt"
+                                        ref={systemPromptRef}
+                                        className="min-h-[400px] font-mono text-sm pr-12"
+                                        placeholder="You are an expert in..."
+                                        value={formData.system_prompt}
+                                        onChange={(e) => handleInputChange("system_prompt", e.target.value)}
+                                    />
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="absolute right-2 top-2 h-8 w-8 text-muted-foreground hover:text-primary"
+                                        onClick={() => setIsLibraryOpen(!isLibraryOpen)}
+                                        title="Toggle Snippet Library"
+                                    >
+                                        <BookTemplate className="h-5 w-5" />
+                                    </Button>
+                                </div>
                             </div>
                         </CardContent>
                     </Card>
@@ -784,6 +825,28 @@ export default function AgentEditorPage() {
                     )}
                 </div>
             </div>
+
+            {/* Snippet Library Sidebar */}
+            {isLibraryOpen && (
+                <div className="fixed right-0 top-0 bottom-0 w-80 bg-background border-l border-border shadow-2xl z-50 flex flex-col animate-in slide-in-from-right duration-300">
+                    <div className="p-4 border-b flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <BookTemplate className="h-5 w-5 text-primary" />
+                            <h2 className="font-bold">Snippet Library</h2>
+                        </div>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setIsLibraryOpen(false)}
+                        >
+                            <X className="h-4 w-4" />
+                        </Button>
+                    </div>
+                    <div className="flex-1 p-4 overflow-hidden">
+                        <PromptLibrary onInsert={handleInsertSnippet} />
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

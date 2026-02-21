@@ -114,6 +114,129 @@ class SettingsResponse(BaseModel):
     openrouter_api_key_set: bool
 
 
+# --- Test Suite Schemas ---
+
+class TestSuiteBase(BaseModel):
+    """Base schema for test suite data."""
+    name: str
+    description: Optional[str] = None
+
+
+class TestSuiteCreate(TestSuiteBase):
+    """Schema for creating a new test suite."""
+    agent_id: str
+
+    @field_validator("name")
+    @classmethod
+    def name_not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Suite name cannot be empty")
+        return v.strip()
+
+
+class TestSuiteUpdate(BaseModel):
+    """Schema for updating a test suite."""
+    name: Optional[str] = None
+    description: Optional[str] = None
+
+
+class TestSuiteResponse(TestSuiteBase):
+    """Schema for test suite response."""
+    id: str
+    agent_id: str
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TestSuiteListResponse(BaseModel):
+    """Schema for a list of test suites."""
+    suites: list[TestSuiteResponse]
+    total: int
+
+
+# --- Test Case Schemas ---
+
+class TestCaseBase(BaseModel):
+    """Base schema for test case data."""
+    task: str
+    expected_behavior: str
+    rubric: Optional[str] = None
+
+
+class TestCaseCreate(TestCaseBase):
+    """Schema for creating a test case."""
+    @field_validator("task")
+    @classmethod
+    def task_not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Task cannot be empty")
+        return v.strip()
+
+
+class TestCaseUpdate(BaseModel):
+    """Schema for updating a test case."""
+    task: Optional[str] = None
+    expected_behavior: Optional[str] = None
+    rubric: Optional[str] = None
+
+
+class TestCaseResponse(TestCaseBase):
+    """Schema for test case response."""
+    id: str
+    suite_id: str
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TestCaseListResponse(BaseModel):
+    """Schema for a list of test cases."""
+    cases: list[TestCaseResponse]
+    total: int
+
+
+# --- Prompt Snippet Schemas ---
+
+class PromptSnippetBase(BaseModel):
+    """Base schema for prompt snippets."""
+    name: str
+    content: str
+
+
+class PromptSnippetCreate(PromptSnippetBase):
+    """Schema for creating a snippet."""
+    @field_validator("name")
+    @classmethod
+    def name_not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Snippet name cannot be empty")
+        return v.strip()
+
+
+class PromptSnippetUpdate(BaseModel):
+    """Schema for updating a snippet."""
+    name: Optional[str] = None
+    content: Optional[str] = None
+
+
+class PromptSnippetResponse(PromptSnippetBase):
+    """Schema for snippet response."""
+    id: str
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PromptSnippetListResponse(BaseModel):
+    """Schema for a list of snippets."""
+    snippets: list[PromptSnippetResponse]
+    total: int
+
+
 # --- Run Schemas ---
 
 class RunCreate(BaseModel):
@@ -122,6 +245,7 @@ class RunCreate(BaseModel):
     task: str = Field(..., min_length=1, description="The user's task description")
     variable_values: Optional[dict[str, str]] = None  # {{var}} substitution values
     tags: Optional[str] = None  # comma-separated labels e.g. "baseline,v2"
+    test_case_id: Optional[str] = None
 
 
 class RunResponse(BaseModel):
@@ -136,6 +260,9 @@ class RunResponse(BaseModel):
     error_message: Optional[str] = None
     resolved_prompt: Optional[str] = None
     tags: Optional[str] = None
+    test_case_id: Optional[str] = None
+    eval_score: Optional[float] = None
+    eval_feedback: Optional[str] = None
     created_at: datetime
     completed_at: Optional[datetime] = None
 
