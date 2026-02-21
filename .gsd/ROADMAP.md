@@ -136,3 +136,27 @@
 - Centralized search service with error handling
 - Clean search result formatting for LLM context
 - Configurable API keys via environment variables
+
+---
+
+### Phase 9: Testing & Evaluation
+**Status**: ✅ Complete
+**Objective**: Build a robust testing and evaluation suite for agents, including batch execution and automated LLM-as-a-Judge scoring.
+
+**Deliverables**:
+- Test Suite & Test Case management UI
+- Prompt Snippet library for instruction reuse
+- Batch execution service for running suites
+- LLM-as-a-Judge evaluation service (score + feedback)
+- Result visualization (badges and Judge feedback on Run details)
+
+---
+
+### Phase 10: Advanced UX & Analytics
+**Status**: 📋 Planned
+**Objective**: Scale the user experience with better run-time visibility, cost controls, and aggregate analytics.
+
+**Deliverables**:
+- **Live Prompt Preview**: Real-time view of the fully resolved system prompt (including skills and variables).
+- **Model Picker with Cost Estimator**: Per-model pricing display and pre-run cost warning based on constraints.
+- **Analytics Dashboard**: Aggregate metrics (success rate, avg cost/tokens) per agent over time.
