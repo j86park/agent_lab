@@ -146,6 +146,9 @@ export const agentApi = {
         fetchApi<void>(`/api/agents/${agentId}/workspace/${encodeURIComponent(filename)}`, {
             method: "DELETE",
         }),
+
+    getPromptPreview: (id: string) =>
+        fetchApi<{ prompt: string }>(`/api/agents/${id}/preview`),
 };
 
 // --- Skill API ---

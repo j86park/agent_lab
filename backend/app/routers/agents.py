@@ -18,6 +18,7 @@ from app.services.export_generators import (
     generate_fastapi_app,
     generate_dockerfile,
 )
+from app.services.skills_injector import build_system_prompt
 
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])
@@ -94,7 +95,6 @@ async def update_agent(
     await session.refresh(agent)
     return agent
 
-
 @router.delete("/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_agent(agent_id: str, session: AsyncSession = Depends(get_session)):
     """Delete an agent configuration."""
@@ -108,6 +108,29 @@ async def delete_agent(agent_id: str, session: AsyncSession = Depends(get_sessio
     await session.delete(agent)
     await session.commit()
     return None
+
+
+@router.get("/{agent_id}/preview")
+async def get_agent_prompt_preview(
+    agent_id: str,
+    session: AsyncSession = Depends(get_session),
+):
+    """Get the fully resolved system prompt for an agent (with skills)."""
+    result = await session.execute(select(Agent).where(Agent.id == agent_id))
+    agent = result.scalar_one_or_none()
+    if not agent:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found"
+        )
+    
+    try:
+        combined_prompt = await build_system_prompt(agent_id, session)
+        return {"prompt": combined_prompt}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to build prompt preview: {str(e)}"
+        )
 
 
 _EXPORT_FORMATS = {"python", "fastapi", "docker"}

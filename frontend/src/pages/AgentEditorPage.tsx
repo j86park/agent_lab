@@ -13,12 +13,14 @@ import {
     X,
     AlertCircle,
     BookTemplate,
+    Eye,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { agentApi, runApi, skillApi, type Agent, type Skill, type WorkspaceFile } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { PromptLibrary } from "@/components/PromptLibrary";
+import { PromptPreview } from "@/components/PromptPreview";
 import {
     Card,
     CardContent,
@@ -121,6 +123,8 @@ export default function AgentEditorPage() {
     const [isExporting, setIsExporting] = useState(false);
     const [exportOpen, setExportOpen] = useState(false);
     const [isLibraryOpen, setIsLibraryOpen] = useState(false);
+    const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+    const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
     const systemPromptRef = useRef<HTMLTextAreaElement>(null);
 
     useEffect(() => {
@@ -493,7 +497,36 @@ export default function AgentEditorPage() {
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="prompt">System Prompt</Label>
+                                <div className="flex items-center justify-between">
+                                    <Label htmlFor="prompt">System Prompt</Label>
+                                    {isEditMode && id && (
+                                        <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+                                            <DialogTrigger asChild>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-8 gap-2 text-muted-foreground hover:text-primary"
+                                                    onClick={() => setPreviewRefreshKey(k => k + 1)}
+                                                >
+                                                    <Eye className="h-4 w-4" />
+                                                    Preview Resolved
+                                                </Button>
+                                            </DialogTrigger>
+                                            <DialogContent className="max-w-3xl">
+                                                <DialogHeader>
+                                                    <DialogTitle>Prompt Preview</DialogTitle>
+                                                    <DialogDescription>
+                                                        This shows the final prompt sent to the LLM, including all resolved template variables and attached skills.
+                                                    </DialogDescription>
+                                                </DialogHeader>
+                                                <PromptPreview agentId={id} triggerRefresh={previewRefreshKey} />
+                                                <DialogFooter>
+                                                    <Button onClick={() => setIsPreviewOpen(false)}>Close</Button>
+                                                </DialogFooter>
+                                            </DialogContent>
+                                        </Dialog>
+                                    )}
+                                </div>
                                 <div className="relative">
                                     <Textarea
                                         id="prompt"
