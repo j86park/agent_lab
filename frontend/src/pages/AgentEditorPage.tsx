@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { agentApi, runApi, skillApi, type Agent, type Skill, type WorkspaceFile } from "@/lib/api";
+import { agentApi, runApi, skillApi, metadataApi, type Agent, type Skill, type WorkspaceFile, type ModelMetadata } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { PromptLibrary } from "@/components/PromptLibrary";
 import { PromptPreview } from "@/components/PromptPreview";
@@ -110,6 +110,7 @@ export default function AgentEditorPage() {
     const [isSaving, setIsSaving] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [modelsMetadata, setModelsMetadata] = useState<ModelMetadata[]>([]);
     const [runTask, setRunTask] = useState("");
     const [isStartingRun, setIsStartingRun] = useState(false);
     const [workspaceFiles, setWorkspaceFiles] = useState<File[]>([]);
@@ -140,6 +141,10 @@ export default function AgentEditorPage() {
                     const agent = await agentApi.getAgent(id);
                     setFormData(agent);
                 }
+
+                // Fetch model metadata
+                const meta = await metadataApi.getModels();
+                setModelsMetadata(meta.models);
             } catch (err: any) {
                 console.error("Failed to fetch data", err);
                 setError(err.message || "Failed to load data");
@@ -361,6 +366,22 @@ export default function AgentEditorPage() {
             : [...tools, tool];
         handleInputChange("tools_config", JSON.stringify(updated));
     };
+
+    // Cost estimation
+    const getCostEstimate = () => {
+        const modelMeta = modelsMetadata.find(m => m.id === formData.model);
+        if (!modelMeta) return { cost: 0, high: false };
+
+        const maxTokens = constraints.max_tokens || 2000;
+        const totalTokens = maxTokens + 500; // Estimated input tokens
+        const cost = (totalTokens / 1000000) * modelMeta.output_price_1m; // Simplified conservative estimate
+        return {
+            cost: cost,
+            high: cost > 0.05 // $0.05 threshold for warning
+        };
+    };
+
+    const costEstimate = getCostEstimate();
 
     return (
         <div className="space-y-6">
@@ -643,14 +664,44 @@ export default function AgentEditorPage() {
                                         <SelectValue placeholder="Select Model" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {(MODELS[formData.provider || "openai"] || []).map((m) => (
-                                            <SelectItem key={m.id} value={m.id}>
-                                                {m.name}
-                                            </SelectItem>
-                                        ))}
+                                        {(MODELS[formData.provider || "openai"] || []).map((m) => {
+                                            const meta = modelsMetadata.find(meta => meta.id === m.id);
+                                            const pricingLabel = meta
+                                                ? `(${(meta.input_price_1m / 1000).toFixed(3)} / ${(meta.output_price_1m / 1000).toFixed(3)} per 1k)`
+                                                : "";
+                                            return (
+                                                <SelectItem key={m.id} value={m.id}>
+                                                    <div className="flex items-center justify-between w-full gap-2">
+                                                        <span>{m.name}</span>
+                                                        <span className="text-[10px] text-muted-foreground tabular-nums">
+                                                            {pricingLabel}
+                                                        </span>
+                                                    </div>
+                                                </SelectItem>
+                                            );
+                                        })}
                                     </SelectContent>
                                 </Select>
                             </div>
+
+                            {costEstimate.cost > 0 && (
+                                <div className="rounded-md border p-3 space-y-2 bg-muted/30">
+                                    <div className="flex items-center justify-between text-xs">
+                                        <span className="text-muted-foreground">Est. Cost (Max tokens)</span>
+                                        <span className={costEstimate.high ? "text-orange-500 font-bold" : "text-foreground"}>
+                                            ${costEstimate.cost.toFixed(4)}
+                                        </span>
+                                    </div>
+                                    {costEstimate.high && (
+                                        <Alert variant="default" className="border-orange-500/50 bg-orange-500/10 py-2">
+                                            <AlertCircle className="h-3 w-3 text-orange-500" />
+                                            <AlertDescription className="text-[10px] text-orange-700">
+                                                This model might be expensive for long runs.
+                                            </AlertDescription>
+                                        </Alert>
+                                    )}
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
 

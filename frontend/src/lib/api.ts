@@ -255,6 +255,14 @@ export const suiteApi = {
         }),
 };
 
+export interface ModelMetadata {
+    id: string;
+    provider: string;
+    name: string;
+    input_price_1m: number;
+    output_price_1m: number;
+}
+
 // --- Settings API ---
 
 export const settingsApi = {
@@ -266,6 +274,13 @@ export const settingsApi = {
             method: "PUT",
             body: JSON.stringify(data),
         }),
+};
+
+// --- Metadata API ---
+
+export const metadataApi = {
+    getModels: () =>
+        fetchApi<{ models: ModelMetadata[] }>("/api/metadata/models"),
 };
 
 // --- Run Types ---
