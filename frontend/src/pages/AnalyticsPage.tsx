@@ -4,6 +4,7 @@ import { BarChart3, TrendingUp, DollarSign, Zap, RefreshCw, AlertCircle } from "
 import { toast } from "sonner";
 
 import { analyticsApi, type AnalyticsSummary, type AgentPerformance } from "@/lib/api";
+import { getErrorMessage } from "@/lib/utils";
 import {
     Card,
     CardContent,
@@ -40,10 +41,11 @@ export default function AnalyticsPage() {
             ]);
             setSummary(summaryData);
             setAgents(agentsData.agents);
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error("Failed to fetch analytics", err);
-            setError(err.message || "Failed to load analytics");
-            toast.error("Failed to load analytics");
+            const msg = getErrorMessage(err) || "Failed to load analytics";
+            setError(msg);
+            toast.error(msg);
         } finally {
             setIsLoading(false);
         }

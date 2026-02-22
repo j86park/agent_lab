@@ -3,6 +3,7 @@ import { CheckCircle2, XCircle, Loader2, KeyRound, Server } from "lucide-react";
 import { toast } from "sonner";
 
 import { settingsApi, type SettingsStatus } from "@/lib/api";
+import { getErrorMessage } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
     Card,
@@ -62,8 +63,8 @@ export default function SettingsPage() {
         try {
             const data = await settingsApi.getSettings();
             setStatus(data);
-        } catch (err: any) {
-            toast.error(err.message || "Failed to load settings");
+        } catch (err: unknown) {
+            toast.error(getErrorMessage(err) || "Failed to load settings");
         } finally {
             setIsLoading(false);
         }
@@ -96,8 +97,8 @@ export default function SettingsPage() {
                 [provider.id]: { value: "", isSaving: false },
             }));
             toast.success(`${provider.name} API key saved`);
-        } catch (err: any) {
-            toast.error(err.message || `Failed to save ${provider.name} key`);
+        } catch (err: unknown) {
+            toast.error(getErrorMessage(err) || `Failed to save ${provider.name} key`);
             setKeys((prev) => ({
                 ...prev,
                 [provider.id]: { ...prev[provider.id], isSaving: false },

@@ -4,6 +4,7 @@
  */
 
 // --- Types ---
+import { getErrorMessage } from "./utils";
 
 export interface Agent {
     id: string;
@@ -102,9 +103,9 @@ async function fetchApi<T>(path: string, options: RequestInit = {}): Promise<T> 
         }
 
         return data as T;
-    } catch (error: any) {
-        if (error.message) throw error;
-        throw { message: "Network error or server unavailable" } as ApiError;
+    } catch (error: unknown) {
+        if (error && typeof error === "object" && "message" in error) throw error;
+        throw { message: getErrorMessage(error) || "Network error or server unavailable" } as ApiError;
     }
 }
 
