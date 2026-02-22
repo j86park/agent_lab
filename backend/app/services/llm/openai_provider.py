@@ -68,6 +68,7 @@ class OpenAIProvider(BaseLLMProvider):
             model=model,
             messages=openai_messages,
             **kwargs_extra,
+            **kwargs,
         )
 
         choice = response.choices[0]

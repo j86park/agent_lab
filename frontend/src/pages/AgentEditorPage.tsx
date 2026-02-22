@@ -1,21 +1,19 @@
+import { getErrorMessage } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
     ArrowLeft,
-    FolderOpen,
     Loader2,
     Paperclip,
     Play,
     Download,
-    RefreshCw,
     Save,
     Trash2,
     X,
-    AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { agentApi, runApi, skillApi, type Agent, type Skill, type WorkspaceFile } from "@/lib/api";
+import { agentApi, runApi, skillApi, metadataApi, type Agent, type Skill, type WorkspaceFile, type ModelMetadata } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
     Card,
@@ -27,13 +25,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
     Dialog,
     DialogContent,
@@ -43,43 +37,15 @@ import {
     DialogTitle,
     DialogTrigger,
 } from "@/components/ui/dialog";
-import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertCircle } from "lucide-react";
 
-const PROVIDERS = [
-    { id: "openai", name: "OpenAI" },
-    { id: "anthropic", name: "Anthropic" },
-    { id: "openrouter", name: "OpenRouter" },
-    { id: "ollama", name: "Ollama (Local)" },
-];
-
-const MODELS: Record<string, { id: string; name: string }[]> = {
-    openai: [
-        { id: "gpt-4o", name: "GPT-4o" },
-        { id: "gpt-4o-mini", name: "GPT-4o mini" },
-        { id: "gpt-4-turbo", name: "GPT-4 Turbo" },
-        { id: "gpt-3.5-turbo", name: "GPT-3.5 Turbo" },
-    ],
-    anthropic: [
-        { id: "claude-3-5-sonnet-20240620", name: "Claude 3.5 Sonnet" },
-        { id: "claude-3-5-haiku-20241022", name: "Claude 3.5 Haiku" },
-        { id: "claude-3-opus-20240229", name: "Claude 3 Opus" },
-    ],
-    openrouter: [
-        { id: "openai/gpt-4o", name: "OpenAI: GPT-4o" },
-        { id: "anthropic/claude-3.5-sonnet", name: "Anthropic: Claude 3.5 Sonnet" },
-        { id: "google/gemini-pro-1.5", name: "Google: Gemini Pro 1.5" },
-        { id: "meta-llama/llama-3-70b-instruct", name: "Meta: Llama 3 70B" },
-    ],
-    ollama: [
-        { id: "llama3", name: "Llama 3" },
-        { id: "codellama", name: "Code Llama" },
-        { id: "mistral", name: "Mistral" },
-        { id: "phi3", name: "Phi-3" },
-    ],
-};
+// Editor sub-components
+import { AgentBasicInfo } from "@/components/agent-editor/AgentBasicInfo";
+import { ModelProviderSettings } from "@/components/agent-editor/ModelProviderSettings";
+import { PromptEditor } from "@/components/agent-editor/PromptEditor";
+import { ConstraintSettings } from "@/components/agent-editor/ConstraintSettings";
+import { WorkspaceMonitor } from "@/components/agent-editor/WorkspaceMonitor";
 
 const DEFAULT_AGENT: Partial<Agent> = {
     name: "",
@@ -106,6 +72,7 @@ export default function AgentEditorPage() {
     const [isSaving, setIsSaving] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [modelsMetadata, setModelsMetadata] = useState<ModelMetadata[]>([]);
     const [runTask, setRunTask] = useState("");
     const [isStartingRun, setIsStartingRun] = useState(false);
     const [workspaceFiles, setWorkspaceFiles] = useState<File[]>([]);
@@ -118,6 +85,7 @@ export default function AgentEditorPage() {
     const [exportFormat, setExportFormat] = useState<"python" | "fastapi" | "docker">("python");
     const [isExporting, setIsExporting] = useState(false);
     const [exportOpen, setExportOpen] = useState(false);
+    // Warning: we removed some refs and state that moved to components
 
     useEffect(() => {
         const fetchData = async () => {
@@ -132,9 +100,13 @@ export default function AgentEditorPage() {
                     const agent = await agentApi.getAgent(id);
                     setFormData(agent);
                 }
-            } catch (err: any) {
+
+                // Fetch model metadata
+                const meta = await metadataApi.getModels();
+                setModelsMetadata(meta.models);
+            } catch (err) {
                 console.error("Failed to fetch data", err);
-                setError(err.message || "Failed to load data");
+                setError(getErrorMessage(err) || "Failed to load data");
                 toast.error("Failed to load data");
             } finally {
                 setIsLoading(false);
@@ -148,13 +120,13 @@ export default function AgentEditorPage() {
         }
     }, [id, isEditMode]);
 
-    const handleInputChange = (field: keyof Agent, value: any) => {
-        setFormData((prev) => ({ ...prev, [field]: value }));
+    const handleInputChange = (field: keyof Agent, value: string | boolean | number | object | null | undefined) => {
+        setFormData((prev) => ({ ...prev, [field]: value } as Partial<Agent>));
 
-        // Auto-update model if provider changes
+        // Changed: Removed auto model update, handled in AgentBasicInfo now wait it's not handled in AgentBasicInfo! Let's keep it here!
         if (field === "provider") {
-            const firstModel = MODELS[value as string]?.[0]?.id || "";
-            setFormData((prev) => ({ ...prev, provider: value, model: firstModel }));
+            const firstModel = value === "anthropic" ? "claude-3-5-sonnet-20240620" : value === "openrouter" ? "openai/gpt-4o" : value === "ollama" ? "llama3" : "gpt-4o";
+            setFormData((prev) => ({ ...prev, provider: value as string, model: firstModel } as Partial<Agent>));
         }
     };
 
@@ -178,8 +150,8 @@ export default function AgentEditorPage() {
             await agentApi.deleteWorkspaceFile(id, filename);
             toast.success(`Deleted ${filename}`);
             await loadWorkspaceFiles();
-        } catch (err: any) {
-            toast.error(err.message || "Failed to delete file");
+        } catch (err) {
+            toast.error(getErrorMessage(err) || "Failed to delete file");
         }
     };
 
@@ -199,9 +171,9 @@ export default function AgentEditorPage() {
                 toast.success("Agent created successfully");
                 navigate(`/agents/${newAgent.id}`);
             }
-        } catch (err: any) {
+        } catch (err) {
             console.error("Failed to save agent", err);
-            toast.error(err.message || "Failed to save agent");
+            toast.error(getErrorMessage(err) || "Failed to save agent");
         } finally {
             setIsSaving(false);
         }
@@ -214,9 +186,9 @@ export default function AgentEditorPage() {
             await agentApi.deleteAgent(id);
             toast.success("Agent deleted successfully");
             navigate("/");
-        } catch (err: any) {
+        } catch (err) {
             console.error("Failed to delete agent", err);
-            toast.error(err.message || "Failed to delete agent");
+            toast.error(getErrorMessage(err) || "Failed to delete agent");
             setIsDeleting(false);
         }
     };
@@ -243,9 +215,9 @@ export default function AgentEditorPage() {
             }
             toast.success("Run started!");
             navigate(`/runs/${run.id}`);
-        } catch (err: any) {
+        } catch (err) {
             console.error("Failed to start run", err);
-            toast.error(err.message || "Failed to start run");
+            toast.error(getErrorMessage(err) || "Failed to start run");
         } finally {
             setIsStartingRun(false);
         }
@@ -285,12 +257,14 @@ export default function AgentEditorPage() {
             URL.revokeObjectURL(url);
             toast.success(`Downloaded ${filename}`);
             setExportOpen(false);
-        } catch (err: any) {
-            toast.error(err.message || "Export failed");
+        } catch (err) {
+            toast.error(getErrorMessage(err) || "Export failed");
         } finally {
             setIsExporting(false);
         }
     };
+
+
 
     if (isLoading) {
         return (
@@ -315,11 +289,7 @@ export default function AgentEditorPage() {
         );
     }
 
-    const constraints = JSON.parse(formData.constraints_config || "{}");
-    const updateConstraint = (field: string, value: number) => {
-        const updated = { ...constraints, [field]: value };
-        handleInputChange("constraints_config", JSON.stringify(updated));
-    };
+
 
     const tools = JSON.parse(formData.tools_config || "[]") as string[];
     const toggleTool = (tool: string) => {
@@ -328,6 +298,23 @@ export default function AgentEditorPage() {
             : [...tools, tool];
         handleInputChange("tools_config", JSON.stringify(updated));
     };
+
+    // Cost estimation
+    const getCostEstimate = () => {
+        const modelMeta = modelsMetadata.find(m => m.id === formData.model);
+        if (!modelMeta) return { cost: 0, high: false };
+
+        const constraints = JSON.parse(formData.constraints_config || "{}");
+        const maxTokens = constraints.max_tokens || 2000;
+        const totalTokens = maxTokens + 500; // Estimated input tokens
+        const cost = (totalTokens / 1000000) * modelMeta.output_price_1m; // Simplified conservative estimate
+        return {
+            cost: cost,
+            high: cost > 0.05 // $0.05 threshold for warning
+        };
+    };
+
+    const costEstimate = getCostEstimate();
 
     return (
         <div className="space-y-6">
@@ -439,42 +426,16 @@ export default function AgentEditorPage() {
             <div className="grid gap-6 lg:grid-cols-3">
                 {/* Main Settings */}
                 <div className="lg:col-span-2 space-y-6">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Configuration</CardTitle>
-                            <CardDescription>Basic personality and identity of your agent.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="name">Name</Label>
-                                <Input
-                                    id="name"
-                                    placeholder="e.g. Researcher Bot"
-                                    value={formData.name}
-                                    onChange={(e) => handleInputChange("name", e.target.value)}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="description">Description</Label>
-                                <Textarea
-                                    id="description"
-                                    placeholder="What does this agent do?"
-                                    value={formData.description || ""}
-                                    onChange={(e) => handleInputChange("description", e.target.value)}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="prompt">System Prompt</Label>
-                                <Textarea
-                                    id="prompt"
-                                    className="min-h-[200px] font-mono text-sm"
-                                    placeholder="You are an expert in..."
-                                    value={formData.system_prompt}
-                                    onChange={(e) => handleInputChange("system_prompt", e.target.value)}
-                                />
-                            </div>
-                        </CardContent>
-                    </Card>
+                    <AgentBasicInfo
+                        formData={formData}
+                        handleInputChange={handleInputChange}
+                    />
+                    <PromptEditor
+                        formData={formData}
+                        isEditMode={isEditMode}
+                        id={id}
+                        handleInputChange={handleInputChange}
+                    />
 
                     <Tabs defaultValue="tools">
                         <TabsList>
@@ -534,88 +495,16 @@ export default function AgentEditorPage() {
 
                 {/* Sidebar - Provider & Model */}
                 <div className="space-y-6">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Model &amp; Provider</CardTitle>
-                            <CardDescription>Select the brain for your agent.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="space-y-2">
-                                <Label>Provider</Label>
-                                <Select
-                                    value={formData.provider}
-                                    onValueChange={(v) => handleInputChange("provider", v)}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select Provider" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {PROVIDERS.map((p) => (
-                                            <SelectItem key={p.id} value={p.id}>
-                                                {p.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label>Model</Label>
-                                <Select
-                                    value={formData.model}
-                                    onValueChange={(v) => handleInputChange("model", v)}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select Model" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {(MODELS[formData.provider || "openai"] || []).map((m) => (
-                                            <SelectItem key={m.id} value={m.id}>
-                                                {m.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Constraints</CardTitle>
-                            <CardDescription>Runtime limits and cost controls.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="max_tokens">Max Tokens</Label>
-                                <Input
-                                    id="max_tokens"
-                                    type="number"
-                                    value={constraints.max_tokens}
-                                    onChange={(e) => updateConstraint("max_tokens", parseInt(e.target.value))}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="timeout">Timeout (seconds)</Label>
-                                <Input
-                                    id="timeout"
-                                    type="number"
-                                    value={constraints.timeout_seconds}
-                                    onChange={(e) => updateConstraint("timeout_seconds", parseInt(e.target.value))}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="max_cost">Max Cost ($)</Label>
-                                <Input
-                                    id="max_cost"
-                                    type="number"
-                                    step="0.01"
-                                    value={constraints.max_cost}
-                                    onChange={(e) => updateConstraint("max_cost", parseFloat(e.target.value))}
-                                />
-                            </div>
-                        </CardContent>
-                    </Card>
+                    <ModelProviderSettings
+                        formData={formData}
+                        modelsMetadata={modelsMetadata}
+                        costEstimate={costEstimate}
+                        handleInputChange={handleInputChange}
+                    />
+                    <ConstraintSettings
+                        constraintsConfig={formData.constraints_config || "{}"}
+                        handleInputChange={handleInputChange}
+                    />
 
                     {/* Run Agent — only for saved agents */}
                     {isEditMode && (
@@ -717,70 +606,12 @@ export default function AgentEditorPage() {
 
                     {/* Workspace — only for saved agents */}
                     {isEditMode && (
-                        <Card>
-                            <CardHeader className="pb-3">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <CardTitle className="flex items-center gap-2">
-                                            <FolderOpen className="h-4 w-4" />
-                                            Workspace
-                                            {agentWorkspaceFiles.length > 0 && (
-                                                <span className="text-xs font-normal text-muted-foreground">
-                                                    ({agentWorkspaceFiles.length} file{agentWorkspaceFiles.length !== 1 ? "s" : ""})
-                                                </span>
-                                            )}
-                                        </CardTitle>
-                                        <CardDescription className="mt-1">
-                                            Persistent files available in every run.
-                                        </CardDescription>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={loadWorkspaceFiles}
-                                        disabled={isLoadingWorkspace}
-                                        className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                                        title="Refresh"
-                                    >
-                                        <RefreshCw className={`h-3.5 w-3.5 ${isLoadingWorkspace ? "animate-spin" : ""}`} />
-                                    </button>
-                                </div>
-                            </CardHeader>
-                            <CardContent>
-                                {agentWorkspaceFiles.length === 0 ? (
-                                    <p className="text-xs text-muted-foreground italic">
-                                        No workspace files yet. Attach files when starting a run.
-                                    </p>
-                                ) : (
-                                    <ul className="space-y-1">
-                                        {agentWorkspaceFiles.map((f) => (
-                                            <li
-                                                key={f.name}
-                                                className="flex items-center justify-between rounded-md border border-border bg-muted/40 px-2.5 py-1.5 text-xs"
-                                            >
-                                                <span className="font-mono truncate max-w-[150px]" title={f.name}>
-                                                    {f.name}
-                                                </span>
-                                                <span className="text-muted-foreground ml-2 shrink-0">
-                                                    {f.size_bytes < 1024
-                                                        ? `${f.size_bytes} B`
-                                                        : f.size_bytes < 1024 * 1024
-                                                            ? `${(f.size_bytes / 1024).toFixed(1)} KB`
-                                                            : `${(f.size_bytes / 1024 / 1024).toFixed(1)} MB`}
-                                                </span>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleDeleteWorkspaceFile(f.name)}
-                                                    className="ml-2 shrink-0 text-muted-foreground hover:text-destructive transition-colors"
-                                                    title="Delete file"
-                                                >
-                                                    <Trash2 className="h-3 w-3" />
-                                                </button>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                )}
-                            </CardContent>
-                        </Card>
+                        <WorkspaceMonitor
+                            files={agentWorkspaceFiles}
+                            isLoading={isLoadingWorkspace}
+                            onRefresh={loadWorkspaceFiles}
+                            onDelete={handleDeleteWorkspaceFile}
+                        />
                     )}
                 </div>
             </div>

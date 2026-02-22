@@ -3,7 +3,8 @@
 import os
 from pathlib import Path
 
-from pydantic_settings import BaseSettings
+from typing import Optional
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -21,6 +22,12 @@ class Settings(BaseSettings):
 
     # CORS
     FRONTEND_URL: str = "http://localhost:3000"
+
+    # Search
+    tavily_api_key: Optional[str] = None
+
+    # LLM Keys
+    openrouter_key: Optional[str] = None
 
     @property
     def DATABASE_URL(self) -> str:
@@ -51,7 +58,17 @@ class Settings(BaseSettings):
         for d in dirs:
             d.mkdir(parents=True, exist_ok=True)
 
-    model_config = {"env_prefix": "AGENT_LAB_"}
+    model_config = SettingsConfigDict(
+        env_prefix="AGENT_LAB_",
+        env_file=(".env", ".env.local"),
+        env_file_encoding="utf-8",
+        extra="ignore"
+    )
+
+    @property
+    def OPENROUTER_API_KEY(self) -> str:
+        """Return OpenRouter API key from env or settings."""
+        return os.getenv("OPENROUTER_KEY") or self.openrouter_key or ""
 
 
 # Singleton settings instance

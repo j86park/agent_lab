@@ -8,14 +8,18 @@ import {
     BrainCircuit,
     Settings,
     FlaskConical,
+    TestTube2,
+    BarChart3,
 } from "lucide-react";
 
 const WORKSPACE_ITEMS = [
     { icon: Home, label: "Agents", href: "/" },
     { icon: PlusSquare, label: "New Agent", href: "/agents/new" },
+    { icon: BarChart3, label: "Analytics", href: "/analytics" },
     { icon: History, label: "History", href: "/history" },
     { icon: LayoutTemplate, label: "Templates", href: "/templates" },
     { icon: BrainCircuit, label: "Skills", href: "/skills" },
+    { icon: TestTube2, label: "Test Suites", href: "/test-suites" },
 ];
 
 const SYSTEM_ITEMS = [

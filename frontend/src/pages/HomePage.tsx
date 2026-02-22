@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 
 import { agentApi, type Agent } from "@/lib/api";
+import { getErrorMessage } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
     Card,
@@ -30,10 +31,11 @@ export default function HomePage() {
         try {
             const data = await agentApi.getAgents();
             setAgents(data.agents);
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error("Failed to fetch agents", err);
-            setError(err.message || "Failed to load agents");
-            toast.error("Failed to load agents");
+            const msg = getErrorMessage(err);
+            setError(msg);
+            toast.error(msg);
         } finally {
             setIsLoading(false);
         }

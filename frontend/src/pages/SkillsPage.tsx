@@ -1,3 +1,4 @@
+import { getErrorMessage } from "@/lib/utils";
 import { useEffect, useState } from "react";
 import { PlusSquare, Pencil, Trash2, Loader2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
@@ -59,8 +60,8 @@ export default function SkillsPage() {
         try {
             const data = await skillApi.getSkills();
             setSkills(data.skills);
-        } catch (err: any) {
-            setError(err.message || "Failed to load skills");
+        } catch (err) {
+            setError(getErrorMessage(err) || "Failed to load skills");
             toast.error("Failed to load skills");
         } finally {
             setIsLoading(false);
@@ -105,8 +106,8 @@ export default function SkillsPage() {
                 toast.success("Skill created");
             }
             setDialogOpen(false);
-        } catch (err: any) {
-            toast.error(err.message || "Failed to save skill");
+        } catch (err) {
+            toast.error(getErrorMessage(err) || "Failed to save skill");
         } finally {
             setIsSaving(false);
         }
@@ -125,8 +126,8 @@ export default function SkillsPage() {
             setSkills((prev) => prev.filter((s) => s.id !== deletingSkill.id));
             toast.success("Skill deleted");
             setDeleteDialogOpen(false);
-        } catch (err: any) {
-            toast.error(err.message || "Failed to delete skill");
+        } catch (err) {
+            toast.error(getErrorMessage(err) || "Failed to delete skill");
         } finally {
             setIsDeleting(false);
         }

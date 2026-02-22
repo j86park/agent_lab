@@ -43,19 +43,7 @@ async def _run_agent_background(run_id: str) -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 # Endpoints
 # ─────────────────────────────────────────────────────────────────────────────
-
-import re as _re
-
-
-def _resolve_prompt(template: str, values: dict[str, str]) -> str:
-    """Substitute {{variable}} placeholders with provided values.
-    Missing keys are left as-is (original {{var}} text preserved).
-    """
-    def replacer(m: "_re.Match[str]") -> str:
-        key = m.group(1).strip()
-        return values.get(key, m.group(0))
-    return _re.sub(r'\{\{([^}]+)\}\}', replacer, template)
-
+from app.services.prompt_service import get_resolved_system_prompt
 
 @router.post("", response_model=RunResponse, status_code=status.HTTP_201_CREATED)
 async def create_run(
@@ -81,7 +69,7 @@ async def create_run(
     # Resolve {{variable}} placeholders in the system prompt
     resolved: str | None = None
     if payload.variable_values:
-        resolved = _resolve_prompt(agent.system_prompt, payload.variable_values)
+        resolved = await get_resolved_system_prompt(payload.agent_id, session, payload.variable_values)
 
     run = Run(
         agent_id=payload.agent_id,

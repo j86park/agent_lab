@@ -9,6 +9,9 @@ import CompareRunsPage from "./pages/CompareRunsPage";
 import TemplatesPage from "./pages/TemplatesPage";
 import SkillsPage from "./pages/SkillsPage";
 import SettingsPage from "./pages/SettingsPage";
+import TestSuitesPage from "@/pages/TestSuitesPage";
+import TestSuiteDetailsPage from "@/pages/TestSuiteDetailsPage";
+import AnalyticsPage from "./pages/AnalyticsPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -22,11 +25,14 @@ function App() {
             <Route path="/agents/new" element={<AgentEditorPage />} />
             <Route path="/agents/:id" element={<AgentEditorPage />} />
             <Route path="/runs/:id" element={<RunDashboardPage />} />
+            <Route path="/analytics" element={<AnalyticsPage />} />
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/history/compare" element={<CompareRunsPage />} />
             <Route path="/templates" element={<TemplatesPage />} />
             <Route path="/skills" element={<SkillsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/test-suites" element={<TestSuitesPage />} />
+            <Route path="/test-suites/:id" element={<TestSuiteDetailsPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Route>
         </Routes>

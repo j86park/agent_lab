@@ -5,17 +5,17 @@
 
 ## Must-Haves (from SPEC)
 
-- [ ] Docker Compose one-command deployment
-- [ ] Agent configuration UI (prompt, tools, constraints, file upload)
-- [ ] Sandboxed agent execution in Docker containers
-- [ ] Multi-provider LLM support (OpenAI, Anthropic, OpenRouter, Ollama)
-- [ ] Real-time log streaming via WebSocket
-- [ ] Run history with filtering
-- [ ] Side-by-side run comparison
-- [ ] Export (Python script, FastAPI app, Docker container)
-- [ ] Built-in templates
-- [ ] Modular Skills system (GSD pattern)
-- [ ] Cost and token tracking
+- [x] Docker Compose one-command deployment
+- [x] Agent configuration UI (prompt, tools, constraints, file upload)
+- [x] Sandboxed agent execution in Docker containers
+- [x] Multi-provider LLM support (OpenAI, Anthropic, OpenRouter, Ollama)
+- [x] Real-time log streaming via WebSocket
+- [x] Run history with filtering
+- [x] Side-by-side run comparison
+- [x] Export (Python script, FastAPI app, Docker container)
+- [x] Built-in templates
+- [x] Modular Skills system (GSD pattern)
+- [x] Cost and token tracking
 
 ---
 
@@ -114,7 +114,7 @@
 ---
 
 ### Phase 7: Agent Builder QoL
-**Status**: 🔄 In Progress
+**Status**: ✅ Complete
 **Objective**: Add workspace file uploads, persistent workspaces, prompt variables, quick re-run, and run tags to make building and testing agents significantly faster.
 
 **Deliverables**:
@@ -123,3 +123,51 @@
 - Prompt variables: `{{variable}}` placeholders in system prompts, resolved at run time via UI form
 - Quick Re-Run: button on RunDashboardPage to pre-fill and re-launch a run
 - Run tags: label runs and filter History by tag
+
+---
+
+### Phase 8: Web Search Integration
+**Status**: ✅ Complete
+**Objective**: Transform the current `web_search` tool from a placeholder stub into a fully functional search service that the AI agent can use to browse the internet.
+**Requirements**: REQ-08 (Tool execution), NEW (Web Search capability)
+
+**Deliverables**:
+- Secure search API integration (Tavily)
+- Centralized search service with error handling
+- Clean search result formatting for LLM context
+- Configurable API keys via environment variables
+
+---
+
+### Phase 9: Testing & Evaluation
+**Status**: ✅ Complete
+**Objective**: Build a robust testing and evaluation suite for agents, including batch execution and automated LLM-as-a-Judge scoring.
+
+**Deliverables**:
+- Test Suite & Test Case management UI
+- Prompt Snippet library for instruction reuse
+- Batch execution service for running suites
+- LLM-as-a-Judge evaluation service (score + feedback)
+- Result visualization (badges and Judge feedback on Run details)
+
+---
+
+### Phase 10: Advanced UX & Analytics
+**Status**: ✅ Complete
+**Objective**: Scale the user experience with better run-time visibility, cost controls, and aggregate analytics.
+
+**Deliverables**:
+- **Live Prompt Preview**: Real-time view of the fully resolved system prompt (including skills and variables).
+- **Model Picker with Cost Estimator**: Per-model pricing display and pre-run cost warning based on constraints.
+- **Analytics Dashboard**: Aggregate metrics (success rate, avg cost/tokens) per agent over time.
+---
+
+### Phase 11: Codebase Hygiene
+**Status**: ✅ Complete
+**Objective**: Refactor and clean the codebase to eliminate technical debt, remove unused code, and align with senior engineering standards.
+
+**Deliverables**:
+- **Audit Reports**: Identify unused imports, dead functions, and orphaned files.
+- **Service Layer Abstraction**: Standardize Controller/Service pattern in backend.
+- **Frontend Standardisation**: Separation of UI/Container components and utility consolidation.
+- **Type Cleanup**: Eliminate `any` types and complete TypeScript interfaces.

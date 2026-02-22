@@ -33,11 +33,16 @@ def _get_api_key() -> str:
     return decrypt_value(encrypted, key)
 
 
+def _get_api_key_env() -> str:
+    """Read the OpenRouter API key from environment variables (Settings)."""
+    return settings.openrouter_key or ""
+
+
 class OpenRouterProvider(BaseLLMProvider):
     """OpenRouter provider — uses OpenAI-compatible API at openrouter.ai."""
 
     def _get_client(self) -> AsyncOpenAI:
-        api_key = _get_api_key()
+        api_key = _get_api_key() or settings.OPENROUTER_API_KEY
         return AsyncOpenAI(
             api_key=api_key or "sk-placeholder",
             base_url="https://openrouter.ai/api/v1",

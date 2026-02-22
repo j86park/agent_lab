@@ -51,6 +51,7 @@ class Agent(Base):
     # Relationships
     runs: Mapped[list["Run"]] = relationship(back_populates="agent", cascade="all, delete-orphan")
     skills: Mapped[list["AgentSkill"]] = relationship(back_populates="agent", cascade="all, delete-orphan")
+    test_suites: Mapped[list["TestSuite"]] = relationship(back_populates="agent", cascade="all, delete-orphan")
 
 
 class Skill(Base):
@@ -94,6 +95,75 @@ class AgentSkill(Base):
     skill: Mapped["Skill"] = relationship(back_populates="agents")
 
 
+class TestSuite(Base):
+    """Container for test cases targeting a specific agent."""
+
+    __tablename__ = "test_suites"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=generate_uuid
+    )
+    agent_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("agents.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+    # Relationships
+    agent: Mapped["Agent"] = relationship(back_populates="test_suites")
+    test_cases: Mapped[list["TestCase"]] = relationship(back_populates="suite", cascade="all, delete-orphan")
+
+
+class TestCase(Base):
+    """Individual test definition: task + expected behavior + rubric."""
+
+    __tablename__ = "test_cases"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=generate_uuid
+    )
+    suite_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("test_suites.id", ondelete="CASCADE"), nullable=False
+    )
+    task: Mapped[str] = mapped_column(Text, nullable=False)
+    expected_behavior: Mapped[str] = mapped_column(Text, nullable=False)
+    rubric: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+    # Relationships
+    suite: Mapped["TestSuite"] = relationship(back_populates="test_cases")
+    runs: Mapped[list["Run"]] = relationship(back_populates="test_case")
+
+
+class PromptSnippet(Base):
+    """Reusable prompt block for the UI library."""
+
+    __tablename__ = "prompt_snippets"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=generate_uuid
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
 class Run(Base):
     """Record of a single agent execution."""
 
@@ -120,8 +190,15 @@ class Run(Base):
     )
     completed_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
 
+    test_case_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("test_cases.id", ondelete="SET NULL"), nullable=True
+    )
+    eval_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    eval_feedback: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     # Relationships
     agent: Mapped["Agent"] = relationship(back_populates="runs")
+    test_case: Mapped[Optional["TestCase"]] = relationship(back_populates="runs")
     logs: Mapped[list["RunLog"]] = relationship(back_populates="run", cascade="all, delete-orphan")
 
 

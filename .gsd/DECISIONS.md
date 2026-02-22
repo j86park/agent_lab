@@ -1,12 +1,12 @@
-# DECISIONS.md — Architecture Decision Records
+## Phase 8 Decisions
 
-## Format
+**Date:** 2026-02-20
 
-| ID | Decision | Date | Context | Status |
-|----|----------|------|---------|--------|
-| ADR-01 | Mount host Docker socket into backend container | 2026-02-16 | Required for backend to manage sandbox containers; DinD alternative is heavier | Accepted |
-| ADR-02 | Include Ollama support in MVP | 2026-02-16 | Key differentiator for privacy/local-first story; worth the extra scope | Accepted |
-| ADR-03 | Include FastAPI + Docker export in MVP | 2026-02-16 | Production-ready export strengthens value proposition; Python-only export too minimal | Accepted |
-| ADR-04 | SQLite as sole database | 2026-02-16 | Simplicity for local-first; no external DB server needed; sufficient for single-user | Accepted |
-| ADR-05 | shadcn/ui for frontend components | 2026-02-16 | Accessible, composable, Tailwind-based; good DX for solo developer | Accepted |
-| ADR-06 | GSD-style modular Skills library | 2026-02-16 | Allows reusable rule enforcement and complex behaviors without cluttering agent prompts | Accepted |
+### Implementation Approach
+- **Chose**: Dedicated Search API (Tavily) via Backend Service.
+- **Alternatives Considered**: Provider-specific search models (OpenRouter/Perplexity).
+- **Rationale**:
+    1. **Provider Agnostic**: Using a backend search service allows the "Web Search" tool to work regardless of which LLM provider is selected (Ollama, Anthropic, etc.). If we used an OpenRouter search model, the user would be locked into that specific provider.
+    2. **Context Optimization**: Tavily is purpose-built for LLM agents. It performs "RAG-ready" extraction—stripping HTML, ads, and irrelevant UI elements before returning data. This significantly reduces token usage compared to raw search result processing.
+    3. **Deterministic Structure**: Having a dedicated backend service allows us to control exactly how results are formatted and truncated before they hit the LLM, preventing context overflow and ensuring consistent agent behavior.
+    4. **Latency**: Dedicated search endpoints are generally faster than waiting for a multi-stage LLM search model to respond.

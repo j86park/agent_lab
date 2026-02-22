@@ -156,13 +156,13 @@ async def execute_tool(
         return "\n".join(output_parts)
 
     elif tool_name == "web_search":
+        from app.services.search import perform_search
         query = arguments.get("query", "")
-        # Placeholder — real web search deferred to future phase
-        logger.info("web_search tool called (stub) for query: %s", query)
-        return (
-            f"Web search for '{query}' is not yet implemented in this version of Agent Lab. "
-            "Please use information already available in the context or workspace files."
-        )
+        if not query:
+            return "Error: 'query' argument is required for web_search"
+        
+        logger.info("Executing web_search for query: %s", query)
+        return await perform_search(query)
 
     else:
         return f"Error: Unknown tool '{tool_name}'. Available tools: {', '.join(AVAILABLE_TOOLS)}"

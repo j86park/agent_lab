@@ -1,3 +1,4 @@
+import { getErrorMessage } from "@/lib/utils";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
@@ -8,7 +9,12 @@ import {
     Coins,
     Hash,
     Loader2,
+    Plus,
+    RefreshCw,
+    X,
     XCircle,
+    Activity,
+    ShieldCheck,
 } from "lucide-react";
 
 import { runApi, type Run, type RunLog } from "@/lib/api";
@@ -18,6 +24,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -91,6 +101,29 @@ function StatusBadge({ status }: { status: Run["status"] }) {
     );
 }
 
+function EvaluationBadge({ score }: { score: number | null }) {
+    if (score === null) return null;
+
+    let colorClass = "text-amber-400 border-amber-400/30 bg-amber-400/10";
+    let label = "Partial";
+
+    if (score >= 0.9) {
+        colorClass = "text-green-400 border-green-400/30 bg-green-400/10";
+        label = "Pass";
+    } else if (score <= 0.1) {
+        colorClass = "text-red-400 border-red-400/30 bg-red-400/10";
+        label = "Fail";
+    }
+
+    return (
+        <Badge variant="secondary" className={`gap-1.5 ${colorClass}`}>
+            <ShieldCheck className="h-3.5 w-3.5" />
+            <span className="font-bold">{(score * 100).toFixed(0)}%</span>
+            <span>{label}</span>
+        </Badge>
+    );
+}
+
 // ─── Log Level Styles ─────────────────────────────────────────────────────────
 
 const LOG_LEVEL_STYLES: Record<string, string> = {
@@ -132,6 +165,16 @@ export default function RunDashboardPage() {
     const [logs, setLogs] = useState<RunLog[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const navigate = useNavigate();
+
+    // Re-run state
+    const [showReRun, setShowReRun] = useState(false);
+    const [reRunTask, setReRunTask] = useState("");
+    const [isReRunning, setIsReRunning] = useState(false);
+
+    // Tags state
+    const [isEditingTags, setIsEditingTags] = useState(false);
+    const [newTag, setNewTag] = useState("");
 
     // Live duration counter
     const [elapsed, setElapsed] = useState<number | null>(null);
@@ -240,7 +283,7 @@ export default function RunDashboardPage() {
                 setIsLoading(false);
             })
             .catch((err) => {
-                setError(err.message || "Failed to load run");
+                setError(getErrorMessage(err) || "Failed to load run");
                 setIsLoading(false);
             });
 
@@ -252,6 +295,63 @@ export default function RunDashboardPage() {
             ws?.close();
         };
     }, [runId]);
+
+    // ─── Actions ─────────────────────────────────────────────────────────────
+
+    const handleReRun = async () => {
+        if (!run || !reRunTask.trim()) return;
+        setIsReRunning(true);
+        try {
+            const newRun = await runApi.createRun(run.agent_id, reRunTask.trim(), undefined, run.tags);
+            toast.success("New run started");
+            navigate(`/runs/${newRun.id}`);
+        } catch (err) {
+            toast.error(getErrorMessage(err) || "Failed to start re-run");
+        } finally {
+            setIsReRunning(false);
+        }
+    };
+
+    const handleAddTag = async () => {
+        if (!run || !newTag.trim()) {
+            setIsEditingTags(false);
+            return;
+        }
+        const tag = newTag.trim();
+        const existing = run.tags ? run.tags.split(",").map(t => t.trim()) : [];
+        if (existing.includes(tag)) {
+            setNewTag("");
+            setIsEditingTags(false);
+            return;
+        }
+
+        const updatedTags = [...existing, tag].join(",");
+        try {
+            const updatedRun = await runApi.updateRunTags(run.id, updatedTags);
+            setRun(updatedRun);
+            setNewTag("");
+        } catch (err) {
+            toast.error(getErrorMessage(err) || "Failed to add tag");
+        } finally {
+            setIsEditingTags(false);
+        }
+    };
+
+    const handleRemoveTag = async (tagToRemove: string) => {
+        if (!run || !run.tags) return;
+        const updatedTags = run.tags
+            .split(",")
+            .map(t => t.trim())
+            .filter(t => t !== tagToRemove)
+            .join(",");
+
+        try {
+            const updatedRun = await runApi.updateRunTags(run.id, updatedTags || null);
+            setRun(updatedRun);
+        } catch (err) {
+            toast.error(getErrorMessage(err) || "Failed to remove tag");
+        }
+    };
 
     // ─── Derived stats ────────────────────────────────────────────────────────
     // Parse cumulative cost/tokens from log metadata if run not yet finalized
@@ -308,12 +408,100 @@ export default function RunDashboardPage() {
                             <h1 className="text-2xl font-bold">Run Dashboard</h1>
                             <StatusBadge status={run.status} />
                         </div>
-                        <p className="text-xs text-muted-foreground font-mono mt-0.5">
-                            ID: {run.id}
-                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                            <p className="text-xs text-muted-foreground font-mono">
+                                ID: {run.id}
+                            </p>
+                            <div className="flex items-center gap-1.5 ml-2">
+                                {run.tags?.split(",").filter(t => t.trim()).map(tag => (
+                                    <Badge key={tag} variant="outline" className="text-[10px] py-0 px-1.5 h-4 gap-1 group">
+                                        {tag}
+                                        <button
+                                            onClick={() => handleRemoveTag(tag)}
+                                            className="hover:text-destructive text-muted-foreground/50 transition-colors"
+                                        >
+                                            <X className="h-2.5 w-2.5" />
+                                        </button>
+                                    </Badge>
+                                ))}
+                                {isEditingTags ? (
+                                    <Input
+                                        autoFocus
+                                        className="h-5 w-24 text-[10px] py-0 px-1.5"
+                                        placeholder="Tag..."
+                                        value={newTag}
+                                        onChange={(e) => setNewTag(e.target.value)}
+                                        onBlur={handleAddTag}
+                                        onKeyDown={(e) => {
+                                            if (e.key === "Enter") handleAddTag();
+                                            if (e.key === "Escape") setIsEditingTags(false);
+                                        }}
+                                    />
+                                ) : (
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-4 px-1.5 text-[10px] text-muted-foreground hover:text-foreground gap-1"
+                                        onClick={() => setIsEditingTags(true)}
+                                    >
+                                        <Plus className="h-2.5 w-2.5" />
+                                        Add tag
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
                     </div>
                 </div>
+                <div className="flex items-center gap-2">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-2"
+                        onClick={() => {
+                            setReRunTask(run.task);
+                            setShowReRun(!showReRun);
+                        }}
+                    >
+                        <RefreshCw className={`h-4 w-4 ${showReRun ? "text-primary" : ""}`} />
+                        Re-run
+                    </Button>
+                </div>
             </div>
+
+            {/* ── Re-run Panel ── */}
+            {showReRun && (
+                <Card className="border-primary/20 bg-primary/5">
+                    <CardContent className="pt-4 space-y-4">
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Modify Task for Re-run</label>
+                            <Textarea
+                                value={reRunTask}
+                                onChange={(e) => setReRunTask(e.target.value)}
+                                placeholder="Enter task description..."
+                                className="min-h-[100px] bg-background"
+                            />
+                        </div>
+                        <div className="flex justify-end gap-2">
+                            <Button variant="ghost" size="sm" onClick={() => setShowReRun(false)}>
+                                Cancel
+                            </Button>
+                            <Button
+                                size="sm"
+                                onClick={handleReRun}
+                                disabled={isReRunning || !reRunTask.trim()}
+                                className="gap-2"
+                            >
+                                {isReRunning ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                    <RefreshCw className="h-4 w-4" />
+                                )}
+                                Start New Run
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
 
             {/* ── Task Description ── */}
             <Card>
@@ -341,6 +529,32 @@ export default function RunDashboardPage() {
                     value={formatTokens(run.total_tokens)}
                 />
             </div>
+
+            {/* ── Evaluation Section ── */}
+            {(run.eval_score !== null || run.eval_feedback) && (
+                <Card className="border-primary/20 bg-primary/5">
+                    <CardHeader className="pb-2">
+                        <div className="flex items-center justify-between">
+                            <CardTitle className="text-sm font-medium flex items-center gap-2">
+                                <Activity className="h-4 w-4 text-primary" />
+                                LLM-as-a-Judge Evaluation
+                            </CardTitle>
+                            <EvaluationBadge score={run.eval_score} />
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                        {run.eval_feedback ? (
+                            <div className="text-sm text-slate-300 bg-background/50 p-3 rounded border border-primary/10 italic">
+                                "{run.eval_feedback}"
+                            </div>
+                        ) : (
+                            <div className="text-sm text-muted-foreground italic">
+                                No feedback provided.
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+            )}
 
             {/* ── Failed Error ── */}
             {run.status === "failed" && run.error_message && (
