@@ -40,6 +40,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
 
+// Editor sub-components
 import { AgentBasicInfo } from "@/components/agent-editor/AgentBasicInfo";
 import { ModelProviderSettings } from "@/components/agent-editor/ModelProviderSettings";
 import { PromptEditor } from "@/components/agent-editor/PromptEditor";
