@@ -30,8 +30,8 @@
 
 ```bash
 # 1. Clone
-git clone https://github.com/yourusername/agent-lab.git
-cd agent-lab
+git clone https://github.com/j86park/agent_lab.git
+cd agent_lab
 
 # 2. Configure — add at least one LLM API key
 cp .env.example .env
@@ -47,7 +47,7 @@ docker compose up
 Or use the one-line install script:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yourusername/agent-lab/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/j86park/agent_lab/main/install.sh | bash
 ```
 
 ---
@@ -79,7 +79,7 @@ Copy `.env.example` to `.env` and fill in at least one API key:
 ## 🗂️ Project Structure
 
 ```
-agent-lab/
+agent_lab/
 ├── backend/           # FastAPI + SQLAlchemy + SQLite
 │   ├── app/
 │   │   ├── routers/   # REST API endpoints
