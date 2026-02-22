@@ -1,3 +1,4 @@
+import { getErrorMessage } from "@/lib/utils";
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import {
@@ -106,8 +107,8 @@ export default function TestSuiteDetailsPage() {
             ]);
             setSuite(suiteData);
             setCases(casesData.cases);
-        } catch (err: any) {
-            setError(err.message || "Failed to load suite details");
+        } catch (err) {
+            setError(getErrorMessage(err) || "Failed to load suite details");
             toast.error("Failed to load suite details");
         } finally {
             setIsLoading(false);
@@ -157,8 +158,8 @@ export default function TestSuiteDetailsPage() {
                 toast.success("Test case added");
             }
             setDialogOpen(false);
-        } catch (err: any) {
-            toast.error(err.message || "Failed to save test case");
+        } catch (err) {
+            toast.error(getErrorMessage(err) || "Failed to save test case");
         } finally {
             setIsSaving(false);
         }
@@ -177,8 +178,8 @@ export default function TestSuiteDetailsPage() {
             setCases((prev) => prev.filter((c) => c.id !== deletingCase.id));
             toast.success("Test case deleted");
             setDeleteDialogOpen(false);
-        } catch (err: any) {
-            toast.error(err.message || "Failed to delete test case");
+        } catch (err) {
+            toast.error(getErrorMessage(err) || "Failed to delete test case");
         } finally {
             setIsDeleting(false);
         }
@@ -190,8 +191,8 @@ export default function TestSuiteDetailsPage() {
         try {
             const res = await suiteApi.runSuite(id);
             toast.success(res.message);
-        } catch (err: any) {
-            toast.error(err.message || "Failed to trigger batch execution");
+        } catch (err) {
+            toast.error(getErrorMessage(err) || "Failed to trigger batch execution");
         } finally {
             setIsRunningBatch(false);
         }

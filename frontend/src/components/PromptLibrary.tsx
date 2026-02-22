@@ -23,7 +23,7 @@ export function PromptLibrary({ onInsert }: PromptLibraryProps) {
             try {
                 const data = await snippetApi.getSnippets();
                 setSnippets(data.snippets);
-            } catch (err: any) {
+            } catch (err) {
                 console.error("Failed to fetch snippets", err);
                 toast.error("Failed to load snippet library");
             } finally {

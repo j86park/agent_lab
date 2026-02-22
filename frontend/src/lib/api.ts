@@ -72,7 +72,7 @@ export interface SettingsStatus {
 export interface ApiError {
     message: string;
     status?: number;
-    detail?: any;
+    detail?: unknown;
 }
 
 // --- Helper ---

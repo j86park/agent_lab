@@ -1,3 +1,4 @@
+import { getErrorMessage } from "@/lib/utils";
 import { useEffect, useState } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
 import { agentApi } from "@/lib/api";
@@ -20,9 +21,9 @@ export function PromptPreview({ agentId, triggerRefresh = 0 }: PromptPreviewProp
         try {
             const data = await agentApi.getPromptPreview(agentId);
             setPreview(data.prompt);
-        } catch (err: any) {
+        } catch (err) {
             console.error("Failed to fetch prompt preview", err);
-            setError(err.message || "Failed to load preview");
+            setError(getErrorMessage(err) || "Failed to load preview");
         } finally {
             setIsLoading(false);
         }

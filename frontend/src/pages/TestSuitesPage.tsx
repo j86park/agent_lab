@@ -1,3 +1,4 @@
+import { getErrorMessage } from "@/lib/utils";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { PlusSquare, Trash2, Loader2, AlertCircle, ArrowRight } from "lucide-react";
@@ -71,8 +72,8 @@ export default function TestSuitesPage() {
             ]);
             setSuites(suitesData.suites);
             setAgents(agentsData.agents);
-        } catch (err: any) {
-            setError(err.message || "Failed to load data");
+        } catch (err) {
+            setError(getErrorMessage(err) || "Failed to load data");
             toast.error("Failed to load data");
         } finally {
             setIsLoading(false);
@@ -104,8 +105,8 @@ export default function TestSuitesPage() {
             setSuites((prev) => [created, ...prev]);
             toast.success("Test suite created");
             setDialogOpen(false);
-        } catch (err: any) {
-            toast.error(err.message || "Failed to create suite");
+        } catch (err) {
+            toast.error(getErrorMessage(err) || "Failed to create suite");
         } finally {
             setIsSaving(false);
         }
@@ -126,8 +127,8 @@ export default function TestSuitesPage() {
             setSuites((prev) => prev.filter((s) => s.id !== deletingSuite.id));
             toast.success("Test suite deleted");
             setDeleteDialogOpen(false);
-        } catch (err: any) {
-            toast.error(err.message || "Failed to delete suite");
+        } catch (err) {
+            toast.error(getErrorMessage(err) || "Failed to delete suite");
         } finally {
             setIsDeleting(false);
         }

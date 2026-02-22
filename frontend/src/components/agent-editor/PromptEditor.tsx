@@ -27,7 +27,7 @@ interface PromptEditorProps {
     formData: Partial<Agent>;
     isEditMode: boolean;
     id?: string;
-    handleInputChange: (field: keyof Agent, value: any) => void;
+    handleInputChange: (field: keyof Agent, value: string | number | boolean | object | null | undefined) => void;
 }
 
 export function PromptEditor({ formData, isEditMode, id, handleInputChange }: PromptEditorProps) {

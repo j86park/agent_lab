@@ -54,7 +54,7 @@ interface ModelProviderSettingsProps {
     formData: Partial<Agent>;
     modelsMetadata: ModelMetadata[];
     costEstimate: { cost: number; high: boolean };
-    handleInputChange: (field: keyof Agent, value: any) => void;
+    handleInputChange: (field: keyof Agent, value: string | number | boolean | object | null | undefined) => void;
 }
 
 export function ModelProviderSettings({ formData, modelsMetadata, costEstimate, handleInputChange }: ModelProviderSettingsProps) {

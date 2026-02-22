@@ -1,3 +1,4 @@
+import { getErrorMessage } from "@/lib/utils";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { agentApi } from "@/lib/api";
@@ -117,8 +118,8 @@ function TemplateCard({ template }: { template: Template }) {
             });
             toast.success(`Agent created from template!`);
             navigate(`/agents/${agent.id}`);
-        } catch (err: any) {
-            toast.error(err.message || "Failed to create agent");
+        } catch (err) {
+            toast.error(getErrorMessage(err) || "Failed to create agent");
             setIsCreating(false);
         }
     }

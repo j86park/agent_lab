@@ -1,3 +1,4 @@
+import { getErrorMessage } from "@/lib/utils";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
@@ -282,7 +283,7 @@ export default function RunDashboardPage() {
                 setIsLoading(false);
             })
             .catch((err) => {
-                setError(err.message || "Failed to load run");
+                setError(getErrorMessage(err) || "Failed to load run");
                 setIsLoading(false);
             });
 
@@ -304,8 +305,8 @@ export default function RunDashboardPage() {
             const newRun = await runApi.createRun(run.agent_id, reRunTask.trim(), undefined, run.tags);
             toast.success("New run started");
             navigate(`/runs/${newRun.id}`);
-        } catch (err: any) {
-            toast.error(err.message || "Failed to start re-run");
+        } catch (err) {
+            toast.error(getErrorMessage(err) || "Failed to start re-run");
         } finally {
             setIsReRunning(false);
         }
@@ -329,8 +330,8 @@ export default function RunDashboardPage() {
             const updatedRun = await runApi.updateRunTags(run.id, updatedTags);
             setRun(updatedRun);
             setNewTag("");
-        } catch (err: any) {
-            toast.error(err.message || "Failed to add tag");
+        } catch (err) {
+            toast.error(getErrorMessage(err) || "Failed to add tag");
         } finally {
             setIsEditingTags(false);
         }
@@ -347,8 +348,8 @@ export default function RunDashboardPage() {
         try {
             const updatedRun = await runApi.updateRunTags(run.id, updatedTags || null);
             setRun(updatedRun);
-        } catch (err: any) {
-            toast.error(err.message || "Failed to remove tag");
+        } catch (err) {
+            toast.error(getErrorMessage(err) || "Failed to remove tag");
         }
     };
 

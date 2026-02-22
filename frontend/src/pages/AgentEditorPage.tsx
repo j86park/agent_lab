@@ -1,3 +1,4 @@
+import { getErrorMessage } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
@@ -102,9 +103,9 @@ export default function AgentEditorPage() {
                 // Fetch model metadata
                 const meta = await metadataApi.getModels();
                 setModelsMetadata(meta.models);
-            } catch (err: any) {
+            } catch (err) {
                 console.error("Failed to fetch data", err);
-                setError(err.message || "Failed to load data");
+                setError(getErrorMessage(err) || "Failed to load data");
                 toast.error("Failed to load data");
             } finally {
                 setIsLoading(false);
@@ -118,14 +119,13 @@ export default function AgentEditorPage() {
         }
     }, [id, isEditMode]);
 
-    const handleInputChange = (field: keyof Agent, value: any) => {
-        setFormData((prev) => ({ ...prev, [field]: value }));
+    const handleInputChange = (field: keyof Agent, value: string | boolean | number | object | null | undefined) => {
+        setFormData((prev) => ({ ...prev, [field]: value } as Partial<Agent>));
 
         // Changed: Removed auto model update, handled in AgentBasicInfo now wait it's not handled in AgentBasicInfo! Let's keep it here!
         if (field === "provider") {
-            // (Assuming MODELS is imported or moved to a constants file. For now, we will handle it in basic info and remove here if we can, but since we didn't export MODELS, let's keep it or just leave it. Wait, AgentBasicInfo uses its own handleInputChange so if we remove it here it will be broken. Let's recreate it simply.)
             const firstModel = value === "anthropic" ? "claude-3-5-sonnet-20240620" : value === "openrouter" ? "openai/gpt-4o" : value === "ollama" ? "llama3" : "gpt-4o";
-            setFormData((prev) => ({ ...prev, provider: value, model: firstModel }));
+            setFormData((prev) => ({ ...prev, provider: value as string, model: firstModel } as Partial<Agent>));
         }
     };
 
@@ -149,8 +149,8 @@ export default function AgentEditorPage() {
             await agentApi.deleteWorkspaceFile(id, filename);
             toast.success(`Deleted ${filename}`);
             await loadWorkspaceFiles();
-        } catch (err: any) {
-            toast.error(err.message || "Failed to delete file");
+        } catch (err) {
+            toast.error(getErrorMessage(err) || "Failed to delete file");
         }
     };
 
@@ -170,9 +170,9 @@ export default function AgentEditorPage() {
                 toast.success("Agent created successfully");
                 navigate(`/agents/${newAgent.id}`);
             }
-        } catch (err: any) {
+        } catch (err) {
             console.error("Failed to save agent", err);
-            toast.error(err.message || "Failed to save agent");
+            toast.error(getErrorMessage(err) || "Failed to save agent");
         } finally {
             setIsSaving(false);
         }
@@ -185,9 +185,9 @@ export default function AgentEditorPage() {
             await agentApi.deleteAgent(id);
             toast.success("Agent deleted successfully");
             navigate("/");
-        } catch (err: any) {
+        } catch (err) {
             console.error("Failed to delete agent", err);
-            toast.error(err.message || "Failed to delete agent");
+            toast.error(getErrorMessage(err) || "Failed to delete agent");
             setIsDeleting(false);
         }
     };
@@ -214,9 +214,9 @@ export default function AgentEditorPage() {
             }
             toast.success("Run started!");
             navigate(`/runs/${run.id}`);
-        } catch (err: any) {
+        } catch (err) {
             console.error("Failed to start run", err);
-            toast.error(err.message || "Failed to start run");
+            toast.error(getErrorMessage(err) || "Failed to start run");
         } finally {
             setIsStartingRun(false);
         }
@@ -256,8 +256,8 @@ export default function AgentEditorPage() {
             URL.revokeObjectURL(url);
             toast.success(`Downloaded ${filename}`);
             setExportOpen(false);
-        } catch (err: any) {
-            toast.error(err.message || "Export failed");
+        } catch (err) {
+            toast.error(getErrorMessage(err) || "Export failed");
         } finally {
             setIsExporting(false);
         }
@@ -288,7 +288,6 @@ export default function AgentEditorPage() {
         );
     }
 
-    const constraints = JSON.parse(formData.constraints_config || "{}");
 
 
     const tools = JSON.parse(formData.tools_config || "[]") as string[];
@@ -304,6 +303,7 @@ export default function AgentEditorPage() {
         const modelMeta = modelsMetadata.find(m => m.id === formData.model);
         if (!modelMeta) return { cost: 0, high: false };
 
+        const constraints = JSON.parse(formData.constraints_config || "{}");
         const maxTokens = constraints.max_tokens || 2000;
         const totalTokens = maxTokens + 500; // Estimated input tokens
         const cost = (totalTokens / 1000000) * modelMeta.output_price_1m; // Simplified conservative estimate

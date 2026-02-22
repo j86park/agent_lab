@@ -12,7 +12,7 @@ import type { Agent } from "@/lib/api";
 
 interface AgentBasicInfoProps {
     formData: Partial<Agent>;
-    handleInputChange: (field: keyof Agent, value: any) => void;
+    handleInputChange: (field: keyof Agent, value: string | number | boolean | object | null | undefined) => void;
 }
 
 export function AgentBasicInfo({ formData, handleInputChange }: AgentBasicInfoProps) {
