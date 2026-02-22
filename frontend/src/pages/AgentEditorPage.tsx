@@ -2,25 +2,18 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
     ArrowLeft,
-    FolderOpen,
     Loader2,
     Paperclip,
     Play,
     Download,
-    RefreshCw,
     Save,
     Trash2,
     X,
-    AlertCircle,
-    BookTemplate,
-    Eye,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { agentApi, runApi, skillApi, metadataApi, type Agent, type Skill, type WorkspaceFile, type ModelMetadata } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { PromptLibrary } from "@/components/PromptLibrary";
-import { PromptPreview } from "@/components/PromptPreview";
 import {
     Card,
     CardContent,
@@ -31,13 +24,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
     Dialog,
     DialogContent,
@@ -47,43 +36,14 @@ import {
     DialogTitle,
     DialogTrigger,
 } from "@/components/ui/dialog";
-import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertCircle } from "lucide-react";
 
-const PROVIDERS = [
-    { id: "openai", name: "OpenAI" },
-    { id: "anthropic", name: "Anthropic" },
-    { id: "openrouter", name: "OpenRouter" },
-    { id: "ollama", name: "Ollama (Local)" },
-];
-
-const MODELS: Record<string, { id: string; name: string }[]> = {
-    openai: [
-        { id: "gpt-4o", name: "GPT-4o" },
-        { id: "gpt-4o-mini", name: "GPT-4o mini" },
-        { id: "gpt-4-turbo", name: "GPT-4 Turbo" },
-        { id: "gpt-3.5-turbo", name: "GPT-3.5 Turbo" },
-    ],
-    anthropic: [
-        { id: "claude-3-5-sonnet-20240620", name: "Claude 3.5 Sonnet" },
-        { id: "claude-3-5-haiku-20241022", name: "Claude 3.5 Haiku" },
-        { id: "claude-3-opus-20240229", name: "Claude 3 Opus" },
-    ],
-    openrouter: [
-        { id: "openai/gpt-4o", name: "OpenAI: GPT-4o" },
-        { id: "anthropic/claude-3.5-sonnet", name: "Anthropic: Claude 3.5 Sonnet" },
-        { id: "google/gemini-pro-1.5", name: "Google: Gemini Pro 1.5" },
-        { id: "meta-llama/llama-3-70b-instruct", name: "Meta: Llama 3 70B" },
-    ],
-    ollama: [
-        { id: "llama3", name: "Llama 3" },
-        { id: "codellama", name: "Code Llama" },
-        { id: "mistral", name: "Mistral" },
-        { id: "phi3", name: "Phi-3" },
-    ],
-};
+import { AgentBasicInfo } from "@/components/agent-editor/AgentBasicInfo";
+import { ModelProviderSettings } from "@/components/agent-editor/ModelProviderSettings";
+import { PromptEditor } from "@/components/agent-editor/PromptEditor";
+import { ConstraintSettings } from "@/components/agent-editor/ConstraintSettings";
+import { WorkspaceMonitor } from "@/components/agent-editor/WorkspaceMonitor";
 
 const DEFAULT_AGENT: Partial<Agent> = {
     name: "",
@@ -123,10 +83,7 @@ export default function AgentEditorPage() {
     const [exportFormat, setExportFormat] = useState<"python" | "fastapi" | "docker">("python");
     const [isExporting, setIsExporting] = useState(false);
     const [exportOpen, setExportOpen] = useState(false);
-    const [isLibraryOpen, setIsLibraryOpen] = useState(false);
-    const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-    const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
-    const systemPromptRef = useRef<HTMLTextAreaElement>(null);
+    // Warning: we removed some refs and state that moved to components
 
     useEffect(() => {
         const fetchData = async () => {
@@ -164,9 +121,10 @@ export default function AgentEditorPage() {
     const handleInputChange = (field: keyof Agent, value: any) => {
         setFormData((prev) => ({ ...prev, [field]: value }));
 
-        // Auto-update model if provider changes
+        // Changed: Removed auto model update, handled in AgentBasicInfo now wait it's not handled in AgentBasicInfo! Let's keep it here!
         if (field === "provider") {
-            const firstModel = MODELS[value as string]?.[0]?.id || "";
+            // (Assuming MODELS is imported or moved to a constants file. For now, we will handle it in basic info and remove here if we can, but since we didn't export MODELS, let's keep it or just leave it. Wait, AgentBasicInfo uses its own handleInputChange so if we remove it here it will be broken. Let's recreate it simply.)
+            const firstModel = value === "anthropic" ? "claude-3-5-sonnet-20240620" : value === "openrouter" ? "openai/gpt-4o" : value === "ollama" ? "llama3" : "gpt-4o";
             setFormData((prev) => ({ ...prev, provider: value, model: firstModel }));
         }
     };
@@ -305,30 +263,7 @@ export default function AgentEditorPage() {
         }
     };
 
-    const handleInsertSnippet = (content: string) => {
-        const textarea = systemPromptRef.current;
-        if (!textarea) {
-            // Fallback if ref isn't available
-            handleInputChange("system_prompt", (formData.system_prompt || "") + "\n" + content);
-            return;
-        }
 
-        const start = textarea.selectionStart;
-        const end = textarea.selectionEnd;
-        const text = formData.system_prompt || "";
-        const before = text.substring(0, start);
-        const after = text.substring(end);
-        const newValue = before + content + after;
-
-        handleInputChange("system_prompt", newValue);
-
-        // Defer focus and cursor position update
-        setTimeout(() => {
-            textarea.focus();
-            const newPos = start + content.length;
-            textarea.setSelectionRange(newPos, newPos);
-        }, 0);
-    };
 
     if (isLoading) {
         return (
@@ -354,10 +289,7 @@ export default function AgentEditorPage() {
     }
 
     const constraints = JSON.parse(formData.constraints_config || "{}");
-    const updateConstraint = (field: string, value: number) => {
-        const updated = { ...constraints, [field]: value };
-        handleInputChange("constraints_config", JSON.stringify(updated));
-    };
+
 
     const tools = JSON.parse(formData.tools_config || "[]") as string[];
     const toggleTool = (tool: string) => {
@@ -493,83 +425,16 @@ export default function AgentEditorPage() {
             <div className="grid gap-6 lg:grid-cols-3">
                 {/* Main Settings */}
                 <div className="lg:col-span-2 space-y-6">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Configuration</CardTitle>
-                            <CardDescription>Basic personality and identity of your agent.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="name">Name</Label>
-                                <Input
-                                    id="name"
-                                    placeholder="e.g. Researcher Bot"
-                                    value={formData.name}
-                                    onChange={(e) => handleInputChange("name", e.target.value)}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="description">Description</Label>
-                                <Textarea
-                                    id="description"
-                                    placeholder="What does this agent do?"
-                                    value={formData.description || ""}
-                                    onChange={(e) => handleInputChange("description", e.target.value)}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                    <Label htmlFor="prompt">System Prompt</Label>
-                                    {isEditMode && id && (
-                                        <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
-                                            <DialogTrigger asChild>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    className="h-8 gap-2 text-muted-foreground hover:text-primary"
-                                                    onClick={() => setPreviewRefreshKey(k => k + 1)}
-                                                >
-                                                    <Eye className="h-4 w-4" />
-                                                    Preview Resolved
-                                                </Button>
-                                            </DialogTrigger>
-                                            <DialogContent className="max-w-3xl">
-                                                <DialogHeader>
-                                                    <DialogTitle>Prompt Preview</DialogTitle>
-                                                    <DialogDescription>
-                                                        This shows the final prompt sent to the LLM, including all resolved template variables and attached skills.
-                                                    </DialogDescription>
-                                                </DialogHeader>
-                                                <PromptPreview agentId={id} triggerRefresh={previewRefreshKey} />
-                                                <DialogFooter>
-                                                    <Button onClick={() => setIsPreviewOpen(false)}>Close</Button>
-                                                </DialogFooter>
-                                            </DialogContent>
-                                        </Dialog>
-                                    )}
-                                </div>
-                                <div className="relative">
-                                    <Textarea
-                                        id="prompt"
-                                        ref={systemPromptRef}
-                                        className="min-h-[400px] font-mono text-sm pr-12"
-                                        placeholder="You are an expert in..."
-                                        value={formData.system_prompt}
-                                        onChange={(e) => handleInputChange("system_prompt", e.target.value)}
-                                    />
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="absolute right-2 top-2 h-8 w-8 text-muted-foreground hover:text-primary"
-                                        onClick={() => setIsLibraryOpen(!isLibraryOpen)}
-                                        title="Toggle Snippet Library"
-                                    >
-                                        <BookTemplate className="h-5 w-5" />
-                                    </Button>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
+                    <AgentBasicInfo
+                        formData={formData}
+                        handleInputChange={handleInputChange}
+                    />
+                    <PromptEditor
+                        formData={formData}
+                        isEditMode={isEditMode}
+                        id={id}
+                        handleInputChange={handleInputChange}
+                    />
 
                     <Tabs defaultValue="tools">
                         <TabsList>
@@ -629,118 +494,16 @@ export default function AgentEditorPage() {
 
                 {/* Sidebar - Provider & Model */}
                 <div className="space-y-6">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Model &amp; Provider</CardTitle>
-                            <CardDescription>Select the brain for your agent.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="space-y-2">
-                                <Label>Provider</Label>
-                                <Select
-                                    value={formData.provider}
-                                    onValueChange={(v) => handleInputChange("provider", v)}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select Provider" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {PROVIDERS.map((p) => (
-                                            <SelectItem key={p.id} value={p.id}>
-                                                {p.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label>Model</Label>
-                                <Select
-                                    value={formData.model}
-                                    onValueChange={(v) => handleInputChange("model", v)}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select Model" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {(MODELS[formData.provider || "openai"] || []).map((m) => {
-                                            const meta = modelsMetadata.find(meta => meta.id === m.id);
-                                            const pricingLabel = meta
-                                                ? `(${(meta.input_price_1m / 1000).toFixed(3)} / ${(meta.output_price_1m / 1000).toFixed(3)} per 1k)`
-                                                : "";
-                                            return (
-                                                <SelectItem key={m.id} value={m.id}>
-                                                    <div className="flex items-center justify-between w-full gap-2">
-                                                        <span>{m.name}</span>
-                                                        <span className="text-[10px] text-muted-foreground tabular-nums">
-                                                            {pricingLabel}
-                                                        </span>
-                                                    </div>
-                                                </SelectItem>
-                                            );
-                                        })}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            {costEstimate.cost > 0 && (
-                                <div className="rounded-md border p-3 space-y-2 bg-muted/30">
-                                    <div className="flex items-center justify-between text-xs">
-                                        <span className="text-muted-foreground">Est. Cost (Max tokens)</span>
-                                        <span className={costEstimate.high ? "text-orange-500 font-bold" : "text-foreground"}>
-                                            ${costEstimate.cost.toFixed(4)}
-                                        </span>
-                                    </div>
-                                    {costEstimate.high && (
-                                        <Alert variant="default" className="border-orange-500/50 bg-orange-500/10 py-2">
-                                            <AlertCircle className="h-3 w-3 text-orange-500" />
-                                            <AlertDescription className="text-[10px] text-orange-700">
-                                                This model might be expensive for long runs.
-                                            </AlertDescription>
-                                        </Alert>
-                                    )}
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Constraints</CardTitle>
-                            <CardDescription>Runtime limits and cost controls.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="max_tokens">Max Tokens</Label>
-                                <Input
-                                    id="max_tokens"
-                                    type="number"
-                                    value={constraints.max_tokens}
-                                    onChange={(e) => updateConstraint("max_tokens", parseInt(e.target.value))}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="timeout">Timeout (seconds)</Label>
-                                <Input
-                                    id="timeout"
-                                    type="number"
-                                    value={constraints.timeout_seconds}
-                                    onChange={(e) => updateConstraint("timeout_seconds", parseInt(e.target.value))}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="max_cost">Max Cost ($)</Label>
-                                <Input
-                                    id="max_cost"
-                                    type="number"
-                                    step="0.01"
-                                    value={constraints.max_cost}
-                                    onChange={(e) => updateConstraint("max_cost", parseFloat(e.target.value))}
-                                />
-                            </div>
-                        </CardContent>
-                    </Card>
+                    <ModelProviderSettings
+                        formData={formData}
+                        modelsMetadata={modelsMetadata}
+                        costEstimate={costEstimate}
+                        handleInputChange={handleInputChange}
+                    />
+                    <ConstraintSettings
+                        constraintsConfig={formData.constraints_config || "{}"}
+                        handleInputChange={handleInputChange}
+                    />
 
                     {/* Run Agent — only for saved agents */}
                     {isEditMode && (
@@ -842,95 +605,15 @@ export default function AgentEditorPage() {
 
                     {/* Workspace — only for saved agents */}
                     {isEditMode && (
-                        <Card>
-                            <CardHeader className="pb-3">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <CardTitle className="flex items-center gap-2">
-                                            <FolderOpen className="h-4 w-4" />
-                                            Workspace
-                                            {agentWorkspaceFiles.length > 0 && (
-                                                <span className="text-xs font-normal text-muted-foreground">
-                                                    ({agentWorkspaceFiles.length} file{agentWorkspaceFiles.length !== 1 ? "s" : ""})
-                                                </span>
-                                            )}
-                                        </CardTitle>
-                                        <CardDescription className="mt-1">
-                                            Persistent files available in every run.
-                                        </CardDescription>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={loadWorkspaceFiles}
-                                        disabled={isLoadingWorkspace}
-                                        className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                                        title="Refresh"
-                                    >
-                                        <RefreshCw className={`h-3.5 w-3.5 ${isLoadingWorkspace ? "animate-spin" : ""}`} />
-                                    </button>
-                                </div>
-                            </CardHeader>
-                            <CardContent>
-                                {agentWorkspaceFiles.length === 0 ? (
-                                    <p className="text-xs text-muted-foreground italic">
-                                        No workspace files yet. Attach files when starting a run.
-                                    </p>
-                                ) : (
-                                    <ul className="space-y-1">
-                                        {agentWorkspaceFiles.map((f) => (
-                                            <li
-                                                key={f.name}
-                                                className="flex items-center justify-between rounded-md border border-border bg-muted/40 px-2.5 py-1.5 text-xs"
-                                            >
-                                                <span className="font-mono truncate max-w-[150px]" title={f.name}>
-                                                    {f.name}
-                                                </span>
-                                                <span className="text-muted-foreground ml-2 shrink-0">
-                                                    {f.size_bytes < 1024
-                                                        ? `${f.size_bytes} B`
-                                                        : f.size_bytes < 1024 * 1024
-                                                            ? `${(f.size_bytes / 1024).toFixed(1)} KB`
-                                                            : `${(f.size_bytes / 1024 / 1024).toFixed(1)} MB`}
-                                                </span>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleDeleteWorkspaceFile(f.name)}
-                                                    className="ml-2 shrink-0 text-muted-foreground hover:text-destructive transition-colors"
-                                                    title="Delete file"
-                                                >
-                                                    <Trash2 className="h-3 w-3" />
-                                                </button>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                )}
-                            </CardContent>
-                        </Card>
+                        <WorkspaceMonitor
+                            files={agentWorkspaceFiles}
+                            isLoading={isLoadingWorkspace}
+                            onRefresh={loadWorkspaceFiles}
+                            onDelete={handleDeleteWorkspaceFile}
+                        />
                     )}
                 </div>
             </div>
-
-            {/* Snippet Library Sidebar */}
-            {isLibraryOpen && (
-                <div className="fixed right-0 top-0 bottom-0 w-80 bg-background border-l border-border shadow-2xl z-50 flex flex-col animate-in slide-in-from-right duration-300">
-                    <div className="p-4 border-b flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <BookTemplate className="h-5 w-5 text-primary" />
-                            <h2 className="font-bold">Snippet Library</h2>
-                        </div>
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setIsLibraryOpen(false)}
-                        >
-                            <X className="h-4 w-4" />
-                        </Button>
-                    </div>
-                    <div className="flex-1 p-4 overflow-hidden">
-                        <PromptLibrary onInsert={handleInsertSnippet} />
-                    </div>
-                </div>
-            )}
         </div>
     );
 }
