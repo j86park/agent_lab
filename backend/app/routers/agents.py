@@ -18,7 +18,7 @@ from app.services.export_generators import (
     generate_fastapi_app,
     generate_dockerfile,
 )
-from app.services.skills_injector import build_system_prompt
+from app.services.prompt_service import get_resolved_system_prompt
 
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])
@@ -124,7 +124,7 @@ async def get_agent_prompt_preview(
         )
     
     try:
-        combined_prompt = await build_system_prompt(agent_id, session)
+        combined_prompt = await get_resolved_system_prompt(agent_id, session)
         return {"prompt": combined_prompt}
     except Exception as e:
         raise HTTPException(
