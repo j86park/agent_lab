@@ -1,23 +1,15 @@
 """Agent Lab — Agent CRUD API routes."""
 
-import os
-from datetime import datetime, UTC
-from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
 from app.database import get_session
 from app.models import Agent
 from app.schemas import AgentCreate, AgentUpdate, AgentResponse, AgentListResponse
-from app.services.export_generators import (
-    generate_python_script,
-    generate_fastapi_app,
-    generate_dockerfile,
-)
+from app.services import agent_service
 from app.services.prompt_service import get_resolved_system_prompt
 
 
@@ -133,50 +125,20 @@ async def get_agent_prompt_preview(
         )
 
 
-_EXPORT_FORMATS = {"python", "fastapi", "docker"}
-
-_EXPORT_FILENAMES = {
-    "python": "agent.py",
-    "fastapi": "agent_app.py",
-    "docker": "Dockerfile",
-}
-
-
 @router.get("/{agent_id}/export")
 async def export_agent(
     agent_id: str,
     format: str = "python",
     session: AsyncSession = Depends(get_session),
 ):
-    """Export an agent as standalone code.
-
-    format: "python" | "fastapi" | "docker"
-    """
-    if format not in _EXPORT_FORMATS:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unknown format '{format}'. Valid options: {sorted(_EXPORT_FORMATS)}",
-        )
-
+    """Export an agent as standalone code."""
     result = await session.execute(select(Agent).where(Agent.id == agent_id))
     agent = result.scalar_one_or_none()
     if not agent:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found"
         )
-
-    if format == "python":
-        content = generate_python_script(agent)
-    elif format == "fastapi":
-        content = generate_fastapi_app(agent)
-    else:  # docker
-        content = generate_dockerfile(agent)
-
-    return {
-        "filename": _EXPORT_FILENAMES[format],
-        "content": content,
-        "format": format,
-    }
+    return agent_service.export_agent(agent, format)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -194,20 +156,7 @@ async def list_workspace_files(
     if not agent:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
 
-    workspace_dir: Path = settings.AGENT_WORKSPACES_DIR / agent_id
-    if not workspace_dir.exists():
-        return {"files": []}
-
-    files = []
-    for entry in sorted(workspace_dir.iterdir()):
-        if entry.is_file():
-            stat = entry.stat()
-            files.append({
-                "name": entry.name,
-                "size_bytes": stat.st_size,
-                "modified_at": datetime.fromtimestamp(stat.st_mtime, UTC).isoformat(),
-            })
-
+    files = agent_service.list_workspace_files(agent_id)
     return {"files": files}
 
 
@@ -223,14 +172,4 @@ async def delete_workspace_file(
     if not agent:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
 
-    # Prevent path traversal
-    safe_name = Path(filename).name
-    file_path: Path = settings.AGENT_WORKSPACES_DIR / agent_id / safe_name
-
-    if not file_path.exists():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"File '{safe_name}' not found in workspace",
-        )
-
-    file_path.unlink()
+    agent_service.delete_workspace_file(agent_id, filename)
