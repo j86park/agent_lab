@@ -15,9 +15,27 @@ import {
     XCircle,
     Activity,
     ShieldCheck,
+    Pause,
+    Play,
+    Terminal,
+    Database,
+    FileText,
+    AlertTriangle,
+    GitFork,
+    Copy,
+    Send,
 } from "lucide-react";
+import { runApi, type Run, type RunLog, type TrajectoryEvent, type ToolApprovalStatus } from "@/lib/api";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
 
-import { runApi, type Run, type RunLog } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -82,6 +100,22 @@ function StatusBadge({ status }: { status: Run["status"] }) {
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-400" />
                 </span>
                 Running
+            </Badge>
+        );
+    }
+    if (status === "awaiting_approval") {
+        return (
+            <Badge variant="secondary" className="gap-1.5 text-amber-400 border-amber-400/30 bg-amber-400/10">
+                <AlertTriangle className="h-3.5 w-3.5 animate-pulse" />
+                Breakpoint
+            </Badge>
+        );
+    }
+    if (status === "paused") {
+        return (
+            <Badge variant="outline" className="gap-1.5 text-slate-400 border-slate-500/30">
+                <Pause className="h-3.5 w-3.5" />
+                Paused
             </Badge>
         );
     }
@@ -175,11 +209,28 @@ export default function RunDashboardPage() {
     // Tags state
     const [isEditingTags, setIsEditingTags] = useState(false);
     const [newTag, setNewTag] = useState("");
-
     // Live duration counter
     const [elapsed, setElapsed] = useState<number | null>(null);
 
-    // Auto-scroll control
+    // Debugger & Trajectory state
+    const [activeTab, setActiveTab] = useState<"logs" | "trajectory" | "terminal">("logs");
+    const [approvalStatus, setApprovalStatus] = useState<ToolApprovalStatus | null>(null);
+    const [trajectory, setTrajectory] = useState<TrajectoryEvent[]>([]);
+    const [isLoadingTrajectory, setIsLoadingTrajectory] = useState(false);
+
+    // Artifact Dialog state
+    const [activeArtifact, setActiveArtifact] = useState<{ name: string; content: string } | null>(null);
+    // Fork Dialog state
+    const [forkDialogOpen, setForkDialogOpen] = useState(false);
+    const [forkStepIndex, setForkStepIndex] = useState(0);
+    const [forkOverrideTask, setForkOverrideTask] = useState("");
+    const [isForking, setIsForking] = useState(false);
+
+    // Interactive Terminal state
+    const [terminalOutput, setTerminalOutput] = useState<string[]>([]);
+    const [terminalInput, setTerminalInput] = useState("");
+    const terminalWsRef = useRef<WebSocket | null>(null);
+    const terminalEndRef = useRef<HTMLDivElement>(null);
     const scrollAreaRef = useRef<HTMLDivElement>(null);
     const logEndRef = useRef<HTMLDivElement>(null);
     const userScrolled = useRef(false);
@@ -353,8 +404,164 @@ export default function RunDashboardPage() {
         }
     };
 
+    // ─── Debugger & Breakpoint Polling ────────────────────────────────────────
+    useEffect(() => {
+        if (!runId || run?.status !== "awaiting_approval") return;
+        const pollApproval = async () => {
+            try {
+                const data = await runApi.getApprovalStatus(runId);
+                setApprovalStatus(data);
+            } catch { /* ignore */ }
+        };
+        pollApproval();
+        const interval = setInterval(pollApproval, 1500);
+        return () => clearInterval(interval);
+    }, [runId, run?.status]);
+
+    // ─── Trajectory Fetching ──────────────────────────────────────────────────
+    const fetchTrajectory = useCallback(async () => {
+        if (!runId) return;
+        setIsLoadingTrajectory(true);
+        try {
+            const data = await runApi.getTrajectory(runId);
+            setTrajectory(data.events || []);
+        } catch (e) {
+            console.error("Failed to load trajectory:", e);
+        } finally {
+            setIsLoadingTrajectory(false);
+        }
+    }, [runId]);
+
+    useEffect(() => {
+        if (activeTab === "trajectory" || run?.status === "completed") {
+            fetchTrajectory();
+        }
+    }, [activeTab, run?.status, fetchTrajectory]);
+
+    // ─── Terminal WebSocket ───────────────────────────────────────────────────
+    useEffect(() => {
+        if (activeTab !== "terminal" || !runId) {
+            if (terminalWsRef.current) {
+                terminalWsRef.current.close();
+                terminalWsRef.current = null;
+            }
+            return;
+        }
+
+        const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+        const wsUrl = `${proto}//${window.location.host}/ws/runs/${runId}/pty`;
+        const ws = new WebSocket(wsUrl);
+        terminalWsRef.current = ws;
+
+        ws.onopen = () => {
+            setTerminalOutput((prev) => [...prev, "--- Connected to Interactive Workspace Terminal ---\n"]);
+        };
+
+        ws.onmessage = (e) => {
+            setTerminalOutput((prev) => [...prev, e.data]);
+            terminalEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        };
+
+        ws.onclose = () => {
+            setTerminalOutput((prev) => [...prev, "\n--- Terminal session disconnected ---\n"]);
+        };
+
+        return () => {
+            ws.close();
+            terminalWsRef.current = null;
+        };
+    }, [activeTab, runId]);
+
+    const handleSendTerminal = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!terminalInput.trim() || !terminalWsRef.current) return;
+        terminalWsRef.current.send(terminalInput + "\n");
+        setTerminalInput("");
+    };
+
+    // ─── Approval Handlers ───────────────────────────────────────────────────
+    const handleApproveTool = async () => {
+        if (!runId) return;
+        try {
+            await runApi.approveTool(runId);
+            toast.success("Tool call approved! Execution resuming...");
+            setApprovalStatus(null);
+            setRun((prev) => (prev ? { ...prev, status: "running" } : null));
+        } catch (err) {
+            toast.error(getErrorMessage(err) || "Failed to approve tool call");
+        }
+    };
+
+    const handleRejectTool = async () => {
+        if (!runId) return;
+        try {
+            await runApi.rejectTool(runId, "Rejected by user from dashboard");
+            toast.info("Tool call rejected. Feedback sent to agent.");
+            setApprovalStatus(null);
+            setRun((prev) => (prev ? { ...prev, status: "running" } : null));
+        } catch (err) {
+            toast.error(getErrorMessage(err) || "Failed to reject tool call");
+        }
+    };
+
+    const handlePauseRun = async () => {
+        if (!runId) return;
+        try {
+            await runApi.pauseRun(runId);
+            toast.info("Run paused");
+            setRun((prev) => (prev ? { ...prev, status: "paused" } : null));
+        } catch (err) {
+            toast.error(getErrorMessage(err) || "Failed to pause run");
+        }
+    };
+
+    const handleResumeRun = async () => {
+        if (!runId) return;
+        try {
+            await runApi.resumeRun(runId);
+            toast.success("Run resumed");
+            setRun((prev) => (prev ? { ...prev, status: "running" } : null));
+        } catch (err) {
+            toast.error(getErrorMessage(err) || "Failed to resume run");
+        }
+    };
+
+    const handleOpenFork = (stepIdx: number) => {
+        setForkStepIndex(stepIdx);
+        setForkOverrideTask(run?.task || "");
+        setForkDialogOpen(true);
+    };
+
+    const handleConfirmFork = async () => {
+        if (!runId) return;
+        setIsForking(true);
+        try {
+            const childRun = await runApi.forkRun(runId, forkStepIndex, forkOverrideTask || undefined);
+            toast.success(`Forked run from step ${forkStepIndex}!`);
+            setForkDialogOpen(false);
+            navigate(`/runs/${childRun.id}`);
+        } catch (err) {
+            toast.error(getErrorMessage(err) || "Failed to fork run");
+        } finally {
+            setIsForking(false);
+        }
+    };
+
+    const handleViewArtifact = async (logMsg: string) => {
+        if (!runId) return;
+        const match = logMsg.match(/artifact:\/\/([^\s\]]+)/);
+        if (!match) return;
+        const uri = match[1];
+        const artifactName = uri.split("/").pop() || uri;
+        try {
+            const content = await runApi.getArtifactContent(runId, artifactName);
+            setActiveArtifact({ name: artifactName, content });
+        } catch (err) {
+            toast.error(getErrorMessage(err) || "Failed to load artifact");
+        }
+    };
+
     // ─── Derived stats ────────────────────────────────────────────────────────
-    // Parse cumulative cost/tokens from log metadata if run not yet finalized
     const liveCost = run?.cost ?? (() => {
         let c = 0;
         logs.forEach((l) => {
@@ -366,6 +573,14 @@ export default function RunDashboardPage() {
         return c > 0 ? c : null;
     })();
 
+    // Compute total cached tokens from prompt caching
+    let cacheTokens = 0;
+    logs.forEach((l) => {
+        try {
+            const m = JSON.parse(l.metadata_json || "{}");
+            if (m.cache_read_tokens) cacheTokens += m.cache_read_tokens;
+        } catch { /* ignore */ }
+    });
     // ─── Render ───────────────────────────────────────────────────────────────
 
     if (isLoading) {
@@ -407,6 +622,16 @@ export default function RunDashboardPage() {
                         <div className="flex items-center gap-3">
                             <h1 className="text-2xl font-bold">Run Dashboard</h1>
                             <StatusBadge status={run.status} />
+                            {run.status === "running" && (
+                                <Button size="sm" variant="outline" className="gap-1 text-xs h-7 ml-2" onClick={handlePauseRun}>
+                                    <Pause className="h-3.5 w-3.5" /> Pause
+                                </Button>
+                            )}
+                            {run.status === "paused" && (
+                                <Button size="sm" variant="default" className="gap-1 text-xs h-7 ml-2 bg-blue-600 hover:bg-blue-700" onClick={handleResumeRun}>
+                                    <Play className="h-3.5 w-3.5" /> Resume
+                                </Button>
+                            )}
                         </div>
                         <div className="flex items-center gap-2 mt-1">
                             <p className="text-xs text-muted-foreground font-mono">
@@ -511,8 +736,32 @@ export default function RunDashboardPage() {
                 </CardContent>
             </Card>
 
+            {/* ── Breakpoint Approval Banner ── */}
+            {run.status === "awaiting_approval" && approvalStatus?.pending_tool && (
+                <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 space-y-3 animate-in fade-in-50">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <AlertTriangle className="h-5 w-5 text-amber-500 animate-pulse" />
+                            <span className="font-semibold text-sm text-amber-400">Action Approval Required (Breakpoint)</span>
+                        </div>
+                        <div className="flex gap-2">
+                            <Button size="sm" variant="outline" className="text-red-400 border-red-500/40 hover:bg-red-500/10 h-8" onClick={handleRejectTool}>
+                                Reject Call
+                            </Button>
+                            <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-black font-semibold h-8" onClick={handleApproveTool}>
+                                Approve &amp; Execute
+                            </Button>
+                        </div>
+                    </div>
+                    <p className="text-xs text-amber-200/90">{approvalStatus.pending_tool.reason}</p>
+                    <pre className="p-3 rounded bg-black/60 font-mono text-xs overflow-x-auto text-slate-300 border border-amber-500/20">
+                        {approvalStatus.pending_tool.tool_name}({JSON.stringify(approvalStatus.pending_tool.arguments, null, 2)})
+                    </pre>
+                </div>
+            )}
+
             {/* ── Stats Row ── */}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <StatCard
                     icon={Clock}
                     label="Duration"
@@ -527,6 +776,11 @@ export default function RunDashboardPage() {
                     icon={Hash}
                     label="Tokens"
                     value={formatTokens(run.total_tokens)}
+                />
+                <StatCard
+                    icon={Database}
+                    label="Cached Tokens"
+                    value={cacheTokens > 0 ? `${cacheTokens.toLocaleString()} tokens` : "None"}
                 />
             </div>
 
@@ -567,47 +821,278 @@ export default function RunDashboardPage() {
                 </Alert>
             )}
 
-            {/* ── Log Viewer ── */}
-            <Card>
-                <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                        <CardTitle className="text-base">Execution Logs</CardTitle>
-                        <span className="text-xs text-muted-foreground">
-                            {logs.length} {logs.length === 1 ? "entry" : "entries"}
-                        </span>
-                    </div>
-                </CardHeader>
-                <Separator />
-                <CardContent className="p-0">
-                    <ScrollArea ref={scrollAreaRef} className="h-[420px]">
-                        <div className="p-4 font-mono text-xs space-y-1">
-                            {logs.length === 0 ? (
-                                <div className="flex items-center gap-2 text-muted-foreground py-8 justify-center">
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                    Waiting for logs…
+            {/* ── Execution Tabs: Logs, Trajectory & Forking, Interactive Terminal ── */}
+            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "logs" | "trajectory" | "terminal")} className="w-full">
+                <TabsList className="grid grid-cols-3 w-full sm:w-[500px]">
+                    <TabsTrigger value="logs" className="gap-1.5 text-xs">
+                        <FileText className="h-3.5 w-3.5" />
+                        Logs ({logs.length})
+                    </TabsTrigger>
+                    <TabsTrigger value="trajectory" className="gap-1.5 text-xs">
+                        <GitFork className="h-3.5 w-3.5" />
+                        Trajectory ({trajectory.length})
+                    </TabsTrigger>
+                    <TabsTrigger value="terminal" className="gap-1.5 text-xs">
+                        <Terminal className="h-3.5 w-3.5" />
+                        Terminal
+                    </TabsTrigger>
+                </TabsList>
+
+                {/* Tab 1: Execution Logs with Artifact Offload Buttons */}
+                <TabsContent value="logs" className="mt-4">
+                    <Card>
+                        <CardHeader className="pb-3">
+                            <div className="flex items-center justify-between">
+                                <CardTitle className="text-base">Real-Time Execution Logs</CardTitle>
+                                <span className="text-xs text-muted-foreground">
+                                    {logs.length} {logs.length === 1 ? "entry" : "entries"}
+                                </span>
+                            </div>
+                        </CardHeader>
+                        <Separator />
+                        <CardContent className="p-0">
+                            <ScrollArea ref={scrollAreaRef} className="h-[420px]">
+                                <div className="p-4 font-mono text-xs space-y-1">
+                                    {logs.length === 0 ? (
+                                        <div className="flex items-center gap-2 text-muted-foreground py-8 justify-center">
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                            Waiting for logs…
+                                        </div>
+                                    ) : (
+                                        logs.map((log) => {
+                                            const hasArtifact = log.message.includes("artifact://");
+                                            return (
+                                                <div key={log.id} className="flex flex-col gap-1 py-0.5">
+                                                    <div className="flex gap-3 leading-relaxed">
+                                                        <span className="text-slate-600 shrink-0 w-20">
+                                                            {formatTime(log.timestamp)}
+                                                        </span>
+                                                        <span
+                                                            className={`uppercase shrink-0 w-7 font-bold ${LOG_LEVEL_STYLES[log.level] ?? "text-slate-400"}`}
+                                                        >
+                                                            {log.level.slice(0, 4)}
+                                                        </span>
+                                                        <span className="text-slate-300 break-all whitespace-pre-wrap flex-1">
+                                                            {log.message}
+                                                        </span>
+                                                    </div>
+                                                    {hasArtifact && (
+                                                        <div className="ml-24">
+                                                            <Button
+                                                                size="sm"
+                                                                variant="secondary"
+                                                                className="h-6 text-[11px] gap-1 px-2 text-primary"
+                                                                onClick={() => handleViewArtifact(log.message)}
+                                                            >
+                                                                <FileText className="h-3 w-3" />
+                                                                View Offloaded Log File
+                                                            </Button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })
+                                    )}
+                                    <div ref={logEndRef} />
+                                </div>
+                            </ScrollArea>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                {/* Tab 2: Trajectory Step Timeline with Time-Travel Forking */}
+                <TabsContent value="trajectory" className="mt-4">
+                    <Card>
+                        <CardHeader className="pb-3">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <CardTitle className="text-base">Step Timeline (Trajectory)</CardTitle>
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                        Chronological event trace with step-level rollback and time-travel forking.
+                                    </p>
+                                </div>
+                                <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={fetchTrajectory}>
+                                    <RefreshCw className="h-3.5 w-3.5" /> Refresh
+                                </Button>
+                            </div>
+                        </CardHeader>
+                        <Separator />
+                        <CardContent className="p-4">
+                            {isLoadingTrajectory ? (
+                                <div className="flex items-center justify-center py-12 text-muted-foreground">
+                                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                                    Loading trajectory trace...
+                                </div>
+                            ) : trajectory.length === 0 ? (
+                                <div className="text-center py-12 text-muted-foreground text-sm">
+                                    No trajectory events recorded for this run.
                                 </div>
                             ) : (
-                                logs.map((log) => (
-                                    <div key={log.id} className="flex gap-3 leading-relaxed">
-                                        <span className="text-slate-600 shrink-0 w-20">
-                                            {formatTime(log.timestamp)}
-                                        </span>
-                                        <span
-                                            className={`uppercase shrink-0 w-7 font-bold ${LOG_LEVEL_STYLES[log.level] ?? "text-slate-400"}`}
-                                        >
-                                            {log.level.slice(0, 4)}
-                                        </span>
-                                        <span className="text-slate-300 break-all whitespace-pre-wrap">
-                                            {log.message}
-                                        </span>
-                                    </div>
-                                ))
+                                <div className="space-y-4">
+                                    {trajectory.map((event) => (
+                                        <div key={event.id} className="rounded-lg border p-4 bg-muted/20 space-y-2 relative">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <Badge variant="outline" className="font-mono text-xs">
+                                                        Step {event.step_index}
+                                                    </Badge>
+                                                    <Badge
+                                                        className={`uppercase font-mono text-[10px] ${
+                                                            event.event_type === "action"
+                                                                ? "bg-blue-500/20 text-blue-400 border-blue-500/30"
+                                                                : event.event_type === "observation"
+                                                                ? "bg-purple-500/20 text-purple-400 border-purple-500/30"
+                                                                : event.event_type === "thought"
+                                                                ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                                                                : "bg-slate-500/20 text-slate-300"
+                                                        }`}
+                                                        variant="secondary"
+                                                    >
+                                                        {event.event_type}
+                                                    </Badge>
+                                                    <span className="text-[11px] text-muted-foreground">
+                                                        {formatTime(event.created_at)}
+                                                    </span>
+                                                </div>
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="h-7 text-xs gap-1 text-primary border-primary/20 hover:bg-primary/10"
+                                                    onClick={() => handleOpenFork(event.step_index)}
+                                                >
+                                                    <GitFork className="h-3 w-3" />
+                                                    Fork from Step {event.step_index}
+                                                </Button>
+                                            </div>
+
+                                            <pre className="p-2.5 rounded bg-black/50 font-mono text-xs overflow-x-auto text-slate-200">
+                                                {JSON.stringify(event.payload, null, 2)}
+                                            </pre>
+                                        </div>
+                                    ))}
+                                </div>
                             )}
-                            <div ref={logEndRef} />
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                {/* Tab 3: Interactive Workspace Terminal */}
+                <TabsContent value="terminal" className="mt-4">
+                    <Card>
+                        <CardHeader className="pb-3">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <CardTitle className="text-base flex items-center gap-2">
+                                        <Terminal className="h-4 w-4 text-primary" />
+                                        Interactive Workspace Terminal
+                                    </CardTitle>
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                        Live interactive shell attached directly to the agent's workspace directory.
+                                    </p>
+                                </div>
+                                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setTerminalOutput([])}>
+                                    Clear
+                                </Button>
+                            </div>
+                        </CardHeader>
+                        <Separator />
+                        <CardContent className="p-4 space-y-3">
+                            <div className="h-[360px] rounded-lg bg-black p-4 font-mono text-xs text-green-400 overflow-y-auto border border-border/40 whitespace-pre-wrap">
+                                {terminalOutput.length === 0 ? (
+                                    <span className="text-slate-600">Connecting to interactive shell...</span>
+                                ) : (
+                                    terminalOutput.join("")
+                                )}
+                                <div ref={terminalEndRef} />
+                            </div>
+                            <form onSubmit={handleSendTerminal} className="flex gap-2">
+                                <Input
+                                    placeholder="Type a bash command (e.g. ls -la, cat file.txt) and press Enter..."
+                                    value={terminalInput}
+                                    onChange={(e) => setTerminalInput(e.target.value)}
+                                    className="font-mono text-xs bg-black/40"
+                                />
+                                <Button type="submit" size="sm" className="gap-1.5 shrink-0">
+                                    <Send className="h-3.5 w-3.5" /> Send
+                                </Button>
+                            </form>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+            </Tabs>
+
+            {/* ── Offloaded Artifact Content Modal ── */}
+            <Dialog open={Boolean(activeArtifact)} onOpenChange={(open) => !open && setActiveArtifact(null)}>
+                <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 font-mono text-sm">
+                            <FileText className="h-4 w-4 text-primary" />
+                            {activeArtifact?.name}
+                        </DialogTitle>
+                        <DialogDescription>
+                            Full offloaded tool observation log stored in local storage.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="flex-1 overflow-y-auto py-2">
+                        <pre className="p-4 rounded-lg bg-black font-mono text-xs text-slate-200 whitespace-pre-wrap overflow-x-auto border">
+                            {activeArtifact?.content}
+                        </pre>
+                    </div>
+                    <DialogFooter className="flex justify-between sm:justify-between items-center">
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1.5 text-xs"
+                            onClick={() => {
+                                if (activeArtifact) {
+                                    navigator.clipboard.writeText(activeArtifact.content);
+                                    toast.success("Artifact copied to clipboard");
+                                }
+                            }}
+                        >
+                            <Copy className="h-3.5 w-3.5" /> Copy Log
+                        </Button>
+                        <Button size="sm" onClick={() => setActiveArtifact(null)}>
+                            Close
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* ── Time-Travel Fork Dialog ── */}
+            <Dialog open={forkDialogOpen} onOpenChange={setForkDialogOpen}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <GitFork className="h-5 w-5 text-primary" />
+                            Fork Run at Step {forkStepIndex}
+                        </DialogTitle>
+                        <DialogDescription>
+                            Create a new independent execution branch initialized with the exact filesystem and history state of Step {forkStepIndex}.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-3 py-2">
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-medium text-muted-foreground">Task for Forked Run</label>
+                            <Textarea
+                                value={forkOverrideTask}
+                                onChange={(e) => setForkOverrideTask(e.target.value)}
+                                placeholder="Describe the goal for this forked execution branch..."
+                                className="min-h-[90px] text-xs"
+                            />
                         </div>
-                    </ScrollArea>
-                </CardContent>
-            </Card>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" size="sm" onClick={() => setForkDialogOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button size="sm" onClick={handleConfirmFork} disabled={isForking || !forkOverrideTask.trim()}>
+                            {isForking && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Fork &amp; Execute
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

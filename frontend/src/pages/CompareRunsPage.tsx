@@ -1,16 +1,17 @@
 import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { runApi, type Run, type RunLog } from "@/lib/api";
+import { runApi, type Run, type RunLog, type TrajectoryDiffResult, type PairwiseEvaluationResult } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ArrowLeft, TrendingDown, TrendingUp, Minus } from "lucide-react";
-
+import { ArrowLeft, TrendingDown, TrendingUp, Minus, Scale, AlertTriangle, CheckCircle2, Loader2, GitCompare } from "lucide-react";
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 const STATUS_STYLES: Record<Run["status"], string> = {
     pending: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
     running: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+    awaiting_approval: "bg-amber-500/20 text-amber-400 border-amber-500/30",
+    paused: "bg-slate-500/20 text-slate-400 border-slate-500/30",
     completed: "bg-green-500/20 text-green-400 border-green-500/30",
     failed: "bg-red-500/20 text-red-400 border-red-500/30",
 };
@@ -142,9 +143,12 @@ export default function CompareRunsPage() {
     const [run2, setRun2] = useState<Run | null>(null);
     const [logs1, setLogs1] = useState<RunLog[]>([]);
     const [logs2, setLogs2] = useState<RunLog[]>([]);
+    const [trajectoryDiff, setTrajectoryDiff] = useState<TrajectoryDiffResult | null>(null);
+    const [pairwiseResult, setPairwiseResult] = useState<PairwiseEvaluationResult | null>(null);
+    const [isLoadingDiff, setIsLoadingDiff] = useState(false);
+    const [isLoadingPairwise, setIsLoadingPairwise] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
-
     useEffect(() => {
         if (!run1Id || !run2Id) {
             setError("Two run IDs are required. Go back to History and select 2 runs.");
@@ -166,8 +170,19 @@ export default function CompareRunsPage() {
             })
             .catch(() => setError("Failed to load one or both runs."))
             .finally(() => setLoading(false));
-    }, [run1Id, run2Id]);
 
+        setIsLoadingDiff(true);
+        runApi.compareDiff(run1Id, run2Id)
+            .then(setTrajectoryDiff)
+            .catch((e) => console.error("Diff failed", e))
+            .finally(() => setIsLoadingDiff(false));
+
+        setIsLoadingPairwise(true);
+        runApi.comparePairwise(run1Id, run2Id)
+            .then(setPairwiseResult)
+            .catch((e) => console.error("Pairwise failed", e))
+            .finally(() => setIsLoadingPairwise(false));
+    }, [run1Id, run2Id]);
     if (loading) {
         return (
             <div className="flex items-center justify-center h-60 text-muted-foreground">
@@ -242,6 +257,133 @@ export default function CompareRunsPage() {
                         </div>
                     </div>
                 </div>
+            </div>
+
+            {/* ── Calibrated Pairwise Judgment Card ── */}
+            <div className="rounded-lg border bg-card p-5 space-y-3">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <Scale className="h-5 w-5 text-primary" />
+                        <h2 className="font-semibold text-base">Calibrated Pairwise Evaluation (Order-Bias Audited)</h2>
+                    </div>
+                    {isLoadingPairwise ? (
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            Running position-swapped trials...
+                        </div>
+                    ) : pairwiseResult ? (
+                        <div className="flex items-center gap-2">
+                            {pairwiseResult.position_bias_stable ? (
+                                <Badge variant="secondary" className="gap-1 text-green-500 bg-green-500/10 text-xs">
+                                    <CheckCircle2 className="h-3 w-3" />
+                                    Position Bias Stable
+                                </Badge>
+                            ) : (
+                                <Badge variant="destructive" className="gap-1 text-xs">
+                                    <AlertTriangle className="h-3 w-3" />
+                                    Order Bias Detected (Inconclusive)
+                                </Badge>
+                            )}
+                            <Badge variant="outline" className="font-mono text-xs uppercase">
+                                Winner: {pairwiseResult.winner === "run_a" ? "Run A" : pairwiseResult.winner === "run_b" ? "Run B" : pairwiseResult.winner}
+                            </Badge>
+                        </div>
+                    ) : null}
+                </div>
+                {pairwiseResult && (
+                    <div className="space-y-2 text-xs text-muted-foreground bg-muted/30 p-3 rounded">
+                        <p className="font-medium text-foreground">{pairwiseResult.explanation}</p>
+                        <div className="flex gap-4 font-mono text-[11px] pt-1 text-slate-400">
+                            <span>Trial 1 (A vs B): {pairwiseResult.trial_1_winner.toUpperCase()}</span>
+                            <span>•</span>
+                            <span>Trial 2 (B vs A): {pairwiseResult.trial_2_winner.toUpperCase()}</span>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* ── Trajectory Step Divergence Diff Card ── */}
+            <div className="rounded-lg border bg-card p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <GitCompare className="h-5 w-5 text-primary" />
+                        <div>
+                            <h2 className="font-semibold text-base">Trajectory Step Divergence Diff</h2>
+                            <p className="text-xs text-muted-foreground">
+                                Identifies the exact execution step where tool selection or parameter arguments diverged.
+                            </p>
+                        </div>
+                    </div>
+                    {trajectoryDiff && (
+                        <Badge
+                            variant={trajectoryDiff.has_divergence ? "destructive" : "secondary"}
+                            className="text-xs"
+                        >
+                            {trajectoryDiff.has_divergence
+                                ? `Diverged at Step ${trajectoryDiff.divergence_step}`
+                                : "Identical Trajectories"}
+                        </Badge>
+                    )}
+                </div>
+
+                {isLoadingDiff ? (
+                    <div className="flex items-center justify-center py-6 text-muted-foreground text-xs">
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Analyzing trajectory step diffs...
+                    </div>
+                ) : trajectoryDiff && trajectoryDiff.step_diffs.length > 0 ? (
+                    <div className="space-y-2">
+                        <div className="grid grid-cols-12 text-[11px] font-semibold uppercase text-muted-foreground px-3 py-1.5 bg-muted/40 rounded">
+                            <span className="col-span-1">Step</span>
+                            <span className="col-span-5">Run A Action</span>
+                            <span className="col-span-5">Run B Action</span>
+                            <span className="col-span-1 text-right">Status</span>
+                        </div>
+                        <div className="space-y-1.5 font-mono text-xs">
+                            {trajectoryDiff.step_diffs.map((diff) => (
+                                <div
+                                    key={diff.step_index}
+                                    className={`grid grid-cols-12 items-center p-3 rounded-md border ${
+                                        diff.is_divergent
+                                            ? "bg-red-500/10 border-red-500/30 text-red-300"
+                                            : "bg-muted/20 border-border/40 text-slate-300"
+                                    }`}
+                                >
+                                    <span className="col-span-1 font-bold text-muted-foreground">#{diff.step_index}</span>
+                                    <div className="col-span-5 truncate pr-2">
+                                        <span className="font-semibold text-primary">{diff.run_a_tool || "—"}</span>
+                                        {diff.run_a_args && (
+                                            <span className="text-[11px] text-muted-foreground ml-1.5">
+                                                ({JSON.stringify(diff.run_a_args)})
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="col-span-5 truncate pr-2">
+                                        <span className="font-semibold text-primary">{diff.run_b_tool || "—"}</span>
+                                        {diff.run_b_args && (
+                                            <span className="text-[11px] text-muted-foreground ml-1.5">
+                                                ({JSON.stringify(diff.run_b_args)})
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="col-span-1 text-right">
+                                        {diff.is_divergent ? (
+                                            <Badge variant="destructive" className="text-[10px] py-0 px-1">
+                                                Divergent
+                                            </Badge>
+                                        ) : (
+                                            <Badge variant="secondary" className="text-[10px] py-0 px-1 text-green-500">
+                                                Match
+                                            </Badge>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ) : (
+                    <p className="text-xs text-muted-foreground text-center py-4">No trajectory events available to compare.</p>
+                )}
             </div>
 
             {/* Side-by-side columns */}

@@ -13,8 +13,9 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { agentApi, runApi, skillApi, metadataApi, type Agent, type Skill, type WorkspaceFile, type ModelMetadata } from "@/lib/api";
+import { agentApi, runApi, skillApi, metadataApi, mcpApi, type Agent, type Skill, type WorkspaceFile, type ModelMetadata, type MCPToolInfo } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
     Card,
     CardContent,
@@ -69,6 +70,7 @@ export default function AgentEditorPage() {
     const [formData, setFormData] = useState<Partial<Agent>>(DEFAULT_AGENT);
     const [skills, setSkills] = useState<Skill[]>([]);
     const [isLoading, setIsLoading] = useState(isEditMode);
+    const [mcpTools, setMcpTools] = useState<MCPToolInfo[]>([]);
     const [isSaving, setIsSaving] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -104,6 +106,14 @@ export default function AgentEditorPage() {
                 // Fetch model metadata
                 const meta = await metadataApi.getModels();
                 setModelsMetadata(meta.models);
+
+                // Fetch available MCP tools
+                try {
+                    const mcp = await mcpApi.getAllTools();
+                    setMcpTools(mcp || []);
+                } catch (e) {
+                    console.error("Failed to load MCP tools:", e);
+                }
             } catch (err) {
                 console.error("Failed to fetch data", err);
                 setError(getErrorMessage(err) || "Failed to load data");
@@ -462,6 +472,40 @@ export default function AgentEditorPage() {
                                             />
                                         </div>
                                     ))}
+
+                                    {mcpTools.length > 0 && (
+                                        <div className="pt-4 border-t space-y-3">
+                                            <div className="flex items-center justify-between">
+                                                <Label className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                                                    Discovered MCP Tools
+                                                </Label>
+                                                <Badge variant="outline" className="text-xs">
+                                                    {mcpTools.length} available
+                                                </Badge>
+                                            </div>
+                                            <div className="space-y-3">
+                                                {mcpTools.map((tool) => (
+                                                    <div key={tool.namespaced_name} className="flex items-center justify-between space-x-2 rounded-lg border p-4 bg-muted/20">
+                                                        <div className="space-y-0.5 max-w-[80%]">
+                                                            <div className="flex items-center gap-2">
+                                                                <Label className="text-base font-mono">{tool.name}</Label>
+                                                                <Badge variant="secondary" className="text-[10px]">
+                                                                    {tool.server_name}
+                                                                </Badge>
+                                                            </div>
+                                                            <p className="text-sm text-muted-foreground line-clamp-2">
+                                                                {tool.description || "No description provided."}
+                                                            </p>
+                                                        </div>
+                                                        <Switch
+                                                            checked={tools.includes(tool.namespaced_name)}
+                                                            onCheckedChange={() => toggleTool(tool.namespaced_name)}
+                                                        />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
                                 </CardContent>
                             </Card>
                         </TabsContent>
