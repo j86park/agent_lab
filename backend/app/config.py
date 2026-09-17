@@ -45,6 +45,10 @@ class Settings(BaseSettings):
         """Directory for run workspace file uploads, organised by run_id."""
         return self.DATA_DIR / "workspace_uploads"
 
+    @property
+    def ARTIFACTS_DIR(self) -> Path:
+        """Directory for run artifacts and offloaded tool outputs."""
+        return self.DATA_DIR / "artifacts"
     def ensure_data_dirs(self) -> None:
         """Create all required data directories if they don't exist."""
         dirs = [
@@ -54,6 +58,7 @@ class Settings(BaseSettings):
             self.DATA_DIR / "runs",
             self.WORKSPACE_UPLOADS_DIR,
             self.AGENT_WORKSPACES_DIR,
+            self.ARTIFACTS_DIR,
         ]
         for d in dirs:
             d.mkdir(parents=True, exist_ok=True)

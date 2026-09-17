@@ -11,7 +11,7 @@ class LLMMessage:
     content: str
     tool_call_id: str | None = None
     tool_calls: list[dict] | None = None
-
+    cache_control: dict | None = None
 
 @dataclass
 class LLMResponse:
@@ -21,9 +21,10 @@ class LLMResponse:
     input_tokens: int
     output_tokens: int
     cost: float  # Estimated cost in USD
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
     tool_calls: list[dict] = field(default_factory=list)  # OpenAI-format tool calls
     raw_response: dict = field(default_factory=dict)  # Provider-specific raw response
-
 
 class BaseLLMProvider(ABC):
     """Abstract base class for all LLM providers."""

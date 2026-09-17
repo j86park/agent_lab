@@ -61,7 +61,13 @@ class AnthropicProvider(BaseLLMProvider):
 
         kwargs_extra: dict = {}
         if system_content:
-            kwargs_extra["system"] = system_content
+            kwargs_extra["system"] = [
+                {
+                    "type": "text",
+                    "text": system_content,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ]
         if tools:
             # Convert OpenAI tool format to Anthropic format
             anthropic_tools = []
@@ -73,8 +79,10 @@ class AnthropicProvider(BaseLLMProvider):
                         "description": fn.get("description", ""),
                         "input_schema": fn.get("parameters", {"type": "object", "properties": {}}),
                     })
-            kwargs_extra["tools"] = anthropic_tools
-
+            if anthropic_tools:
+                # Cache all tool schemas up to the last tool
+                anthropic_tools[-1]["cache_control"] = {"type": "ephemeral"}
+                kwargs_extra["tools"] = anthropic_tools
         response = await client.messages.create(
             model=model,
             max_tokens=4096,
@@ -99,9 +107,18 @@ class AnthropicProvider(BaseLLMProvider):
                     },
                 })
 
-        input_tokens = response.usage.input_tokens
-        output_tokens = response.usage.output_tokens
-        cost = self.estimate_cost(input_tokens, output_tokens, model)
+        input_tokens = getattr(response.usage, "input_tokens", 0)
+        output_tokens = getattr(response.usage, "output_tokens", 0)
+        cache_creation_tokens = getattr(response.usage, "cache_creation_input_tokens", 0) or 0
+        cache_read_tokens = getattr(response.usage, "cache_read_input_tokens", 0) or 0
+
+        cost = self.estimate_cost(
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            model=model,
+            cache_read_tokens=cache_read_tokens,
+            cache_write_tokens=cache_creation_tokens,
+        )
 
         return LLMResponse(
             content=content_text,
@@ -109,12 +126,33 @@ class AnthropicProvider(BaseLLMProvider):
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             cost=cost,
+            cache_read_tokens=cache_read_tokens,
+            cache_write_tokens=cache_creation_tokens,
             tool_calls=tool_calls,
             raw_response=response.model_dump(),
         )
 
-    def estimate_cost(self, input_tokens: int, output_tokens: int, model: str) -> float:
+    def estimate_cost(
+        self,
+        input_tokens: int,
+        output_tokens: int,
+        model: str,
+        cache_read_tokens: int = 0,
+        cache_write_tokens: int = 0,
+    ) -> float:
         pricing = ANTHROPIC_PRICING.get(model, (3.00, 15.00))
-        input_cost = (input_tokens / 1_000_000) * pricing[0]
-        output_cost = (output_tokens / 1_000_000) * pricing[1]
+        base_input_price = pricing[0]
+        output_price = pricing[1]
+
+        # Anthropic caching: cache reads get 90% discount (0.10x), cache writes 1.25x
+        cache_write_price = base_input_price * 1.25
+        cache_read_price = base_input_price * 0.10
+        regular_input = max(0, input_tokens - cache_read_tokens - cache_write_tokens)
+
+        input_cost = (
+            (regular_input / 1_000_000) * base_input_price
+            + (cache_write_tokens / 1_000_000) * cache_write_price
+            + (cache_read_tokens / 1_000_000) * cache_read_price
+        )
+        output_cost = (output_tokens / 1_000_000) * output_price
         return round(input_cost + output_cost, 8)

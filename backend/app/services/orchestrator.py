@@ -24,6 +24,7 @@ from app.services.sandbox import SandboxConfig, SandboxManager
 from app.services.skills_injector import build_system_prompt
 from app.services.tools import execute_tool, get_tool_definitions, AVAILABLE_TOOLS
 from app.services.evaluator import EvaluationService
+from app.services.context_engine import context_engine
 from app.services.mcp_service import mcp_service
 from app.models import Agent, Run, RunLog, TestCase, MCPServer
 
@@ -161,6 +162,8 @@ class AgentOrchestrator:
                         session, run_id, "info",
                         f"Iteration {iteration + 1}/{MAX_ITERATIONS}: calling LLM...",
                     )
+                    # Compact context window if history exceeds capacity threshold
+                    messages = context_engine.compact_context(messages)
 
                     response = await provider.chat(
                         messages=messages,
@@ -177,10 +180,21 @@ class AgentOrchestrator:
                         f"LLM responded: {response.input_tokens} in / "
                         f"{response.output_tokens} out tokens, "
                         f"cost ${response.cost:.6f}",
-                        metadata={"tokens_in": response.input_tokens,
-                                  "tokens_out": response.output_tokens,
-                                  "cost": response.cost},
+                        metadata={
+                            "tokens_in": response.input_tokens,
+                            "tokens_out": response.output_tokens,
+                            "cost": response.cost,
+                            "cache_read_tokens": response.cache_read_tokens,
+                            "cache_write_tokens": response.cache_write_tokens,
+                        },
                     )
+
+                    if response.cache_read_tokens > 0:
+                        await self._log(
+                            session, run_id, "info",
+                            f"Prompt cache hit: {response.cache_read_tokens} tokens read from cache",
+                            metadata={"cache_read_tokens": response.cache_read_tokens},
+                        )
 
                     # ── Tool calls? ────────────────────────────────────────
                     if response.tool_calls:
@@ -231,12 +245,26 @@ class AgentOrchestrator:
                                 session, run_id, "info",
                                 f"Tool result: {tool_output[:200]}{'...' if len(tool_output) > 200 else ''}",
                             )
+                            # Process observation for truncation and artifact offloading
+                            tool_call_id = tc.get("id", f"call_{iteration}_{tool_name}")
+                            processed_output, artifact_uri = context_engine.process_tool_observation(
+                                run_id=run_id,
+                                tool_call_id=tool_call_id,
+                                tool_output=tool_output,
+                            )
+
+                            if artifact_uri:
+                                await self._log(
+                                    session, run_id, "info",
+                                    f"Large tool observation offloaded to artifact: {artifact_uri}",
+                                    metadata={"artifact_uri": artifact_uri},
+                                )
 
                             # Append the tool result
                             messages.append(LLMMessage(
                                 role="tool",
-                                content=tool_output,
-                                tool_call_id=tc.get("id", ""),
+                                content=processed_output,
+                                tool_call_id=tool_call_id,
                             ))
                         # Loop again for LLM to process tool results
                         continue

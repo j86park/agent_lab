@@ -10,7 +10,8 @@ from typing import Optional
 
 import aiofiles
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, UploadFile, File, status
-from sqlalchemy import func, select
+from fastapi.responses import PlainTextResponse
+from app.services.context_engine import context_engine
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -248,3 +249,60 @@ async def upload_run_files(
         logger.info("Uploaded workspace file '%s' for agent %s", filename, run.agent_id)
 
     return {"uploaded": saved}
+
+
+@router.get("/{run_id}/artifacts")
+async def list_run_artifacts(
+    run_id: str,
+    session: AsyncSession = Depends(get_session),
+):
+    """List all offloaded artifacts for a run."""
+    run = await session.get(Run, run_id)
+    if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Run '{run_id}' not found",
+        )
+
+    run_artifacts_dir = context_engine.get_run_artifacts_dir(run_id)
+    if not run_artifacts_dir.exists():
+        return {"artifacts": []}
+
+    artifacts = []
+    for f in run_artifacts_dir.iterdir():
+        if f.is_file():
+            artifacts.append({
+                "name": f.name,
+                "size_bytes": f.stat().st_size,
+                "uri": f"artifact://{run_id}/{f.name}",
+            })
+    return {"artifacts": artifacts}
+
+
+@router.get("/{run_id}/artifacts/{artifact_id}", response_class=PlainTextResponse)
+async def get_run_artifact(
+    run_id: str,
+    artifact_id: str,
+    session: AsyncSession = Depends(get_session),
+):
+    """Retrieve full raw content of an offloaded run artifact."""
+    run = await session.get(Run, run_id)
+    if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Run '{run_id}' not found",
+        )
+
+    try:
+        content = context_engine.read_artifact(run_id, artifact_id)
+        return content
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Artifact '{artifact_id}' not found for run '{run_id}'",
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
