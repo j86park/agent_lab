@@ -381,10 +381,17 @@ class AgentOrchestrator:
                         run_logs = log_result.scalars().all()
 
                         evaluator = EvaluationService()
-                        eval_result = await evaluator.evaluate_run(run, test_case, run_logs)
-                        
-                        run.eval_score = eval_result["score"]
-                        run.eval_feedback = eval_result["feedback"]
+                        events_stmt = (
+                            select(TrajectoryEvent)
+                            .where(TrajectoryEvent.run_id == run_id)
+                            .order_by(TrajectoryEvent.step_index.asc())
+                        )
+                        events_res = await session.execute(events_stmt)
+                        events = events_res.scalars().all()
+
+                        report = await evaluator.evaluate_trajectory(run, test_case, events, run_logs)
+                        run.eval_score = report.normalized_score
+                        run.eval_feedback = report.geval_scores.feedback
                         await session.commit()
                         
                         await self._log(

@@ -123,6 +123,7 @@ class TestSuite(Base):
 class TestCase(Base):
     """Individual test definition: task + expected behavior + rubric."""
 
+    __test__ = False
     __tablename__ = "test_cases"
 
     id: Mapped[str] = mapped_column(

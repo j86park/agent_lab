@@ -17,8 +17,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 import json
 from app.database import get_session
-from app.models import Agent, Run, RunLog, TrajectoryEvent
+from app.models import Agent, Run, RunLog, TrajectoryEvent, TestCase
 from app.schemas import (
+    DeterministicMetrics,
+    PairwiseEvaluationResult,
     RunCreate,
     RunForkRequest,
     RunListResponse,
@@ -27,6 +29,8 @@ from app.schemas import (
     RunTagUpdate,
     ToolApprovalRequest,
     ToolApprovalStatus,
+    TrajectoryDiffResult,
+    TrajectoryEvaluationReport,
     TrajectoryEventResponse,
     TrajectoryResponse,
 )
@@ -541,3 +545,139 @@ async def resume_run(
     run.status = "running"
     await session.commit()
     return {"status": "running", "run_id": run_id}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Trajectory Evaluation & Comparison Endpoints
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/{run_id}/metrics", response_model=DeterministicMetrics)
+async def get_run_metrics(
+    run_id: str,
+    session: AsyncSession = Depends(get_session),
+):
+    """Compute and retrieve deterministic trajectory metrics for a run."""
+    run = await session.get(Run, run_id)
+    if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Run '{run_id}' not found",
+        )
+
+    stmt = select(TrajectoryEvent).where(TrajectoryEvent.run_id == run_id).order_by(TrajectoryEvent.step_index.asc())
+    res = await session.execute(stmt)
+    events = res.scalars().all()
+
+    from app.services.evaluator import EvaluationService
+    evaluator = EvaluationService()
+    metrics = evaluator.compute_deterministic_metrics(run, events)
+    return metrics
+
+
+@router.post("/{run_id}/evaluate", response_model=TrajectoryEvaluationReport)
+async def evaluate_run_trajectory(
+    run_id: str,
+    test_case_id: Optional[str] = None,
+    session: AsyncSession = Depends(get_session),
+):
+    """Trigger G-Eval calibrated multi-dimensional trajectory evaluation for a run."""
+    run = await session.get(Run, run_id)
+    if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Run '{run_id}' not found",
+        )
+
+    tc_id = test_case_id or run.test_case_id
+    test_case = None
+    if tc_id:
+        test_case = await session.get(TestCase, tc_id)
+
+    if not test_case:
+        test_case = TestCase(
+            task=run.task,
+            expected_behavior="The agent should successfully complete the task with valid tool calls and no circular errors.",
+            rubric="Planning efficiency, tool argument validity, and error recovery.",
+        )
+
+    stmt = select(TrajectoryEvent).where(TrajectoryEvent.run_id == run_id).order_by(TrajectoryEvent.step_index.asc())
+    res = await session.execute(stmt)
+    events = res.scalars().all()
+
+    from app.services.evaluator import EvaluationService
+    evaluator = EvaluationService()
+    report = await evaluator.evaluate_trajectory(run, test_case, events)
+
+    # Update run record with normalized score and feedback
+    run.eval_score = report.normalized_score
+    run.eval_feedback = report.geval_scores.feedback
+    await session.commit()
+
+    return report
+
+
+@router.post("/compare/diff", response_model=TrajectoryDiffResult)
+async def compare_trajectory_diff(
+    payload: dict[str, str],
+    session: AsyncSession = Depends(get_session),
+):
+    """Compute step-by-step divergence diff between two runs."""
+    run_a_id = payload.get("run_a_id")
+    run_b_id = payload.get("run_b_id")
+    if not run_a_id or not run_b_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Both 'run_a_id' and 'run_b_id' are required",
+        )
+
+    stmt_a = select(TrajectoryEvent).where(TrajectoryEvent.run_id == run_a_id).order_by(TrajectoryEvent.step_index.asc())
+    res_a = await session.execute(stmt_a)
+    events_a = res_a.scalars().all()
+
+    stmt_b = select(TrajectoryEvent).where(TrajectoryEvent.run_id == run_b_id).order_by(TrajectoryEvent.step_index.asc())
+    res_b = await session.execute(stmt_b)
+    events_b = res_b.scalars().all()
+
+    from app.services.evaluator import EvaluationService
+    evaluator = EvaluationService()
+    diff_res = evaluator.compute_trajectory_divergence(run_a_id, run_b_id, events_a, events_b)
+    return diff_res
+
+
+@router.post("/compare/pairwise", response_model=PairwiseEvaluationResult)
+async def compare_runs_pairwise(
+    payload: dict[str, Any],
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Run position-swapped pairwise comparison between Run A and Run B.
+    Mitigates position and verbosity bias by checking order consistency.
+    """
+    run_a_id = payload.get("run_a_id")
+    run_b_id = payload.get("run_b_id")
+    if not run_a_id or not run_b_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Both 'run_a_id' and 'run_b_id' are required",
+        )
+
+    run_a = await session.get(Run, run_a_id)
+    run_b = await session.get(Run, run_b_id)
+    if not run_a or not run_b:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="One or both runs not found")
+
+    task = payload.get("task") or run_a.task
+    expected = payload.get("expected_behavior") or "Optimal and efficient task execution"
+
+    stmt_a = select(TrajectoryEvent).where(TrajectoryEvent.run_id == run_a_id).order_by(TrajectoryEvent.step_index.asc())
+    res_a = await session.execute(stmt_a)
+    events_a = res_a.scalars().all()
+
+    stmt_b = select(TrajectoryEvent).where(TrajectoryEvent.run_id == run_b_id).order_by(TrajectoryEvent.step_index.asc())
+    res_b = await session.execute(stmt_b)
+    events_b = res_b.scalars().all()
+
+    from app.services.evaluator import EvaluationService
+    evaluator = EvaluationService()
+    result = await evaluator.evaluate_pairwise(run_a, run_b, task, expected, events_a, events_b)
+    return result

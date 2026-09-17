@@ -416,3 +416,65 @@ class ToolApprovalStatus(BaseModel):
     run_id: str
     status: str  # "awaiting_approval" | "running" | "paused" | "completed"
     pending_tool: Optional[dict[str, Any]] = None
+
+
+# --- Trajectory Evaluation & Calibrated G-Eval Schemas ---
+
+class DeterministicMetrics(BaseModel):
+    """Deterministic metrics computed directly from trajectory events and logs."""
+    total_steps: int
+    tool_call_count: int
+    redundant_call_count: int
+    tool_error_count: int
+    recovery_rate: float
+    duration_seconds: float
+    total_tokens: int
+
+
+class GEvalRubricScores(BaseModel):
+    """Multi-dimensional G-Eval scores on a 1.0 - 5.0 scale."""
+    planning_score: float = Field(..., ge=1.0, le=5.0)
+    tool_accuracy_score: float = Field(..., ge=1.0, le=5.0)
+    recovery_score: float = Field(..., ge=1.0, le=5.0)
+    task_completion_score: float = Field(..., ge=1.0, le=5.0)
+    overall_score: float = Field(..., ge=1.0, le=5.0)
+    reasoning_trace: str
+    feedback: str
+
+
+class TrajectoryEvaluationReport(BaseModel):
+    """Combined evaluation report containing trace metrics and calibrated judge scores."""
+    run_id: str
+    deterministic_metrics: DeterministicMetrics
+    geval_scores: GEvalRubricScores
+    normalized_score: float = Field(..., ge=0.0, le=1.0)
+
+
+class StepDiff(BaseModel):
+    """Step-level diff between two runs."""
+    step_index: int
+    run_a_tool: Optional[str] = None
+    run_a_args: Optional[dict[str, Any]] = None
+    run_b_tool: Optional[str] = None
+    run_b_args: Optional[dict[str, Any]] = None
+    is_divergent: bool = False
+
+
+class TrajectoryDiffResult(BaseModel):
+    """Result of turn-by-turn comparison between two run trajectories."""
+    run_a_id: str
+    run_b_id: str
+    divergence_step: Optional[int] = None
+    step_diffs: list[StepDiff]
+    has_divergence: bool = False
+
+
+class PairwiseEvaluationResult(BaseModel):
+    """Result of position-swapped pairwise comparison to eliminate judge order bias."""
+    run_a_id: str
+    run_b_id: str
+    winner: str  # "run_a" | "run_b" | "tie" | "inconclusive"
+    position_bias_stable: bool
+    trial_1_winner: str
+    trial_2_winner: str
+    explanation: str
