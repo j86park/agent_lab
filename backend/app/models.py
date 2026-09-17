@@ -200,7 +200,9 @@ class Run(Base):
     agent: Mapped["Agent"] = relationship(back_populates="runs")
     test_case: Mapped[Optional["TestCase"]] = relationship(back_populates="runs")
     logs: Mapped[list["RunLog"]] = relationship(back_populates="run", cascade="all, delete-orphan")
-
+    trajectory_events: Mapped[list["TrajectoryEvent"]] = relationship(
+        back_populates="run", cascade="all, delete-orphan", order_by="TrajectoryEvent.step_index.asc()"
+    )
 
 class RunLog(Base):
     """Individual log entry from an agent execution."""
@@ -248,3 +250,27 @@ class MCPServer(Base):
     updated_at: Mapped[datetime] = mapped_column(
         nullable=False, server_default=func.now(), onupdate=func.now()
     )
+
+
+class TrajectoryEvent(Base):
+    """Immutable record of an agent thought, action, or observation event."""
+
+    __tablename__ = "trajectory_events"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=generate_uuid
+    )
+    run_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("runs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    step_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    event_type: Mapped[str] = mapped_column(
+        String(30), nullable=False
+    )  # "system", "thought", "action", "observation"
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[datetime] = mapped_column(
+        nullable=False, server_default=func.now()
+    )
+
+    # Relationships
+    run: Mapped["Run"] = relationship(back_populates="trajectory_events")

@@ -12,13 +12,27 @@ import aiofiles
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, UploadFile, File, status
 from fastapi.responses import PlainTextResponse
 from app.services.context_engine import context_engine
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.config import settings
+import json
 from app.database import get_session
-from app.models import Agent, Run, RunLog
-from app.schemas import RunCreate, RunListResponse, RunLogResponse, RunResponse, RunTagUpdate
+from app.models import Agent, Run, RunLog, TrajectoryEvent
+from app.schemas import (
+    RunCreate,
+    RunForkRequest,
+    RunListResponse,
+    RunLogResponse,
+    RunResponse,
+    RunTagUpdate,
+    ToolApprovalRequest,
+    ToolApprovalStatus,
+    TrajectoryEventResponse,
+    TrajectoryResponse,
+)
+from app.services.approval_manager import approval_manager
 from app.services.orchestrator import AgentOrchestrator
+from app.services.workspace_service import workspace_service
 
 logger = logging.getLogger(__name__)
 
@@ -306,3 +320,224 @@ async def get_run_artifact(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Trajectory Debugger & Time-Travel Endpoints
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/{run_id}/trajectory", response_model=TrajectoryResponse)
+async def get_run_trajectory(
+    run_id: str,
+    session: AsyncSession = Depends(get_session),
+):
+    """Retrieve the full chronological event stream for an agent run."""
+    run = await session.get(Run, run_id)
+    if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Run '{run_id}' not found",
+        )
+
+    stmt = (
+        select(TrajectoryEvent)
+        .where(TrajectoryEvent.run_id == run_id)
+        .order_by(TrajectoryEvent.step_index.asc(), TrajectoryEvent.created_at.asc())
+    )
+    res = await session.execute(stmt)
+    events = res.scalars().all()
+
+    formatted_events = []
+    for e in events:
+        try:
+            payload = json.loads(e.payload_json)
+        except Exception:
+            payload = {"raw": e.payload_json}
+
+        formatted_events.append(
+            TrajectoryEventResponse(
+                id=e.id,
+                run_id=e.run_id,
+                step_index=e.step_index,
+                event_type=e.event_type,
+                payload=payload,
+                created_at=e.created_at,
+            )
+        )
+
+    return TrajectoryResponse(
+        run_id=run_id,
+        events=formatted_events,
+        total_events=len(formatted_events),
+    )
+
+
+@router.post("/{run_id}/fork", response_model=RunResponse, status_code=status.HTTP_201_CREATED)
+async def fork_run_at_step(
+    run_id: str,
+    payload: RunForkRequest,
+    background_tasks: BackgroundTasks,
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Time-travel debugging: Fork an existing run from step_index.
+    Clones history events 0..step_index, restores workspace snapshot, and launches execution.
+    """
+    parent_run = await session.get(Run, run_id)
+    if parent_run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Parent run '{run_id}' not found",
+        )
+
+    agent = await session.get(Agent, parent_run.agent_id)
+    if agent is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Associated agent not found",
+        )
+
+    # Create new child Run record
+    child_run = Run(
+        agent_id=agent.id,
+        task=payload.override_task or parent_run.task,
+        status="pending",
+        tags=f"forked_from_{run_id[:8]}",
+        resolved_prompt=payload.override_prompt or parent_run.resolved_prompt,
+    )
+    session.add(child_run)
+    await session.commit()
+    await session.refresh(child_run)
+
+    # Clone historical trajectory events up to step_index
+    stmt = (
+        select(TrajectoryEvent)
+        .where(TrajectoryEvent.run_id == run_id, TrajectoryEvent.step_index <= payload.step_index)
+        .order_by(TrajectoryEvent.step_index.asc())
+    )
+    events_res = await session.execute(stmt)
+    events_to_clone = events_res.scalars().all()
+
+    for e in events_to_clone:
+        cloned_event = TrajectoryEvent(
+            run_id=child_run.id,
+            step_index=e.step_index,
+            event_type=e.event_type,
+            payload_json=e.payload_json,
+        )
+        session.add(cloned_event)
+    await session.commit()
+
+    # Clone workspace snapshot state
+    parent_workspace = settings.AGENT_WORKSPACES_DIR / agent.id
+    workspace_service.restore_step_snapshot(parent_workspace, payload.step_index)
+
+    # Launch execution of the forked child run in the background
+    background_tasks.add_task(_run_agent_background, child_run.id)
+    logger.info("Forked run %s from parent %s at step %d", child_run.id, run_id, payload.step_index)
+
+    return RunResponse.model_validate(child_run)
+
+
+@router.get("/{run_id}/approval", response_model=ToolApprovalStatus)
+async def get_tool_approval_status(
+    run_id: str,
+    session: AsyncSession = Depends(get_session),
+):
+    """Inspect whether a run is currently waiting for human-in-the-loop approval."""
+    run = await session.get(Run, run_id)
+    if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Run '{run_id}' not found",
+        )
+
+    pending_details = approval_manager.get_pending(run_id)
+    return ToolApprovalStatus(
+        run_id=run_id,
+        status=run.status,
+        pending_tool=pending_details,
+    )
+
+
+@router.post("/{run_id}/approve")
+async def approve_tool_call(
+    run_id: str,
+    session: AsyncSession = Depends(get_session),
+):
+    """Approve a pending tool call on a paused/breakpoint run."""
+    run = await session.get(Run, run_id)
+    if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Run '{run_id}' not found",
+        )
+
+    success = await approval_manager.approve(run_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Run '{run_id}' has no pending tool call awaiting approval",
+        )
+    return {"status": "approved", "run_id": run_id}
+
+
+@router.post("/{run_id}/reject")
+async def reject_tool_call(
+    run_id: str,
+    payload: ToolApprovalRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    """Reject a pending tool call on a paused/breakpoint run."""
+    run = await session.get(Run, run_id)
+    if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Run '{run_id}' not found",
+        )
+
+    success = await approval_manager.reject(run_id, reason=payload.rejection_reason or "Rejected by user")
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Run '{run_id}' has no pending tool call awaiting approval",
+        )
+    return {"status": "rejected", "run_id": run_id, "reason": payload.rejection_reason}
+
+
+@router.post("/{run_id}/pause")
+async def pause_run(
+    run_id: str,
+    session: AsyncSession = Depends(get_session),
+):
+    """Pause an active run before its next iteration."""
+    run = await session.get(Run, run_id)
+    if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Run '{run_id}' not found",
+        )
+
+    approval_manager.pause(run_id)
+    run.status = "paused"
+    await session.commit()
+    return {"status": "paused", "run_id": run_id}
+
+
+@router.post("/{run_id}/resume")
+async def resume_run(
+    run_id: str,
+    session: AsyncSession = Depends(get_session),
+):
+    """Resume a paused run."""
+    run = await session.get(Run, run_id)
+    if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Run '{run_id}' not found",
+        )
+
+    approval_manager.resume(run_id)
+    run.status = "running"
+    await session.commit()
+    return {"status": "running", "run_id": run_id}

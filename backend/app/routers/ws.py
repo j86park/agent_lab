@@ -117,3 +117,76 @@ async def stream_run_logs(websocket: WebSocket, run_id: str) -> None:
             await websocket.close(code=1011)
         except Exception:
             pass
+
+
+@router.websocket("/ws/runs/{run_id}/pty")
+async def stream_run_pty(websocket: WebSocket, run_id: str) -> None:
+    """
+    Interactive pseudo-terminal (PTY) WebSocket bridge into the run's workspace.
+    Allows xterm.js clients to send terminal keys and receive stdout/stderr streams.
+    """
+    await websocket.accept()
+    logger.info("PTY WebSocket connected for run %s", run_id)
+
+    async with async_session() as session:
+        run = await session.get(Run, run_id)
+        if run is None:
+            await websocket.send_json({"type": "error", "message": f"Run '{run_id}' not found"})
+            await websocket.close(code=1008)
+            return
+        agent_id = run.agent_id
+
+    from app.config import settings
+    workspace_dir = settings.AGENT_WORKSPACES_DIR / agent_id
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+
+    # Spawn an interactive shell subprocess in the workspace directory
+    proc = await asyncio.create_subprocess_shell(
+        "/bin/bash -i",
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+        cwd=str(workspace_dir.resolve()),
+    )
+
+    async def read_stdout():
+        try:
+            while True:
+                if proc.stdout is None:
+                    break
+                data = await proc.stdout.read(1024)
+                if not data:
+                    break
+                await websocket.send_text(data.decode("utf-8", errors="replace"))
+        except Exception:
+            pass
+
+    async def read_stdin():
+        try:
+            while True:
+                msg = await websocket.receive_text()
+                if proc.stdin:
+                    proc.stdin.write(msg.encode("utf-8"))
+                    await proc.stdin.drain()
+        except WebSocketDisconnect:
+            pass
+        except Exception:
+            pass
+
+    stdout_task = asyncio.create_task(read_stdout())
+    stdin_task = asyncio.create_task(read_stdin())
+
+    try:
+        done, pending = await asyncio.wait(
+            [stdout_task, stdin_task],
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        for task in pending:
+            task.cancel()
+    finally:
+        try:
+            proc.terminate()
+            await proc.wait()
+        except Exception:
+            pass
+        logger.info("PTY WebSocket closed for run %s", run_id)

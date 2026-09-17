@@ -376,3 +376,43 @@ class MCPToolCallResponse(BaseModel):
     content: list[dict[str, Any]] = Field(default_factory=list)
     is_error: bool = False
     raw_text: str = ""
+
+
+# --- Trajectory Debugger & Time-Travel Schemas ---
+
+class TrajectoryEventResponse(BaseModel):
+    """Schema for an individual event in an agent run's trajectory."""
+    id: str
+    run_id: str
+    step_index: int
+    event_type: str  # "system" | "thought" | "action" | "observation"
+    payload: dict[str, Any]
+    created_at: datetime
+
+
+class TrajectoryResponse(BaseModel):
+    """Schema for a complete run trajectory trace."""
+    run_id: str
+    events: list[TrajectoryEventResponse]
+    total_events: int
+
+
+class RunForkRequest(BaseModel):
+    """Schema for forking an agent execution at a specific historical step."""
+    step_index: int = Field(..., ge=0, description="The step number to fork from")
+    override_model: Optional[str] = None
+    override_prompt: Optional[str] = None
+    override_task: Optional[str] = None
+
+
+class ToolApprovalRequest(BaseModel):
+    """Schema for human-in-the-loop approval or rejection of a tool call."""
+    decision: Literal["approve", "reject"] = "approve"
+    rejection_reason: Optional[str] = None
+
+
+class ToolApprovalStatus(BaseModel):
+    """Schema for the pending approval status of a run."""
+    run_id: str
+    status: str  # "awaiting_approval" | "running" | "paused" | "completed"
+    pending_tool: Optional[dict[str, Any]] = None

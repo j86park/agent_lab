@@ -26,7 +26,9 @@ from app.services.tools import execute_tool, get_tool_definitions, AVAILABLE_TOO
 from app.services.evaluator import EvaluationService
 from app.services.context_engine import context_engine
 from app.services.mcp_service import mcp_service
-from app.models import Agent, Run, RunLog, TestCase, MCPServer
+from app.services.approval_manager import approval_manager
+from app.services.workspace_service import workspace_service
+from app.models import Agent, Run, RunLog, TestCase, MCPServer, TrajectoryEvent
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +46,24 @@ class AgentOrchestrator:
 
     def __init__(self) -> None:
         self.sandbox_manager = SandboxManager()
+    async def _record_event(
+        self,
+        session: AsyncSession,
+        run_id: str,
+        step_index: int,
+        event_type: str,
+        payload: dict,
+    ) -> None:
+        """Persist an immutable TrajectoryEvent to the database."""
+        event = TrajectoryEvent(
+            run_id=run_id,
+            step_index=step_index,
+            event_type=event_type,
+            payload_json=json.dumps(payload),
+        )
+        session.add(event)
+        await session.commit()
+
 
     # ─────────────────────────────────────────────────────────────────────────
     # Public API
@@ -156,8 +176,15 @@ class AgentOrchestrator:
                 total_cost = 0.0
                 total_input_tokens = 0
                 total_output_tokens = 0
+                step_index = 0
+
+                # Record initial goal event and create baseline snapshot
+                await self._record_event(session, run_id, step_index, "user", {"task": run.task})
+                workspace_service.create_step_snapshot(agent_workspace_dir, step_index)
 
                 for iteration in range(MAX_ITERATIONS):
+                    # Check if user requested to pause execution
+                    await approval_manager.wait_if_paused(run_id)
                     await self._log(
                         session, run_id, "info",
                         f"Iteration {iteration + 1}/{MAX_ITERATIONS}: calling LLM...",
@@ -195,6 +222,12 @@ class AgentOrchestrator:
                             f"Prompt cache hit: {response.cache_read_tokens} tokens read from cache",
                             metadata={"cache_read_tokens": response.cache_read_tokens},
                         )
+                    # Record thought event
+                    if response.content:
+                        await self._record_event(
+                            session, run_id, step_index, "thought",
+                            {"content": response.content, "cost": response.cost}
+                        )
 
                     # ── Tool calls? ────────────────────────────────────────
                     if response.tool_calls:
@@ -218,29 +251,59 @@ class AgentOrchestrator:
                                 f"Tool call: {tool_name}({args})",
                             )
 
-                            parsed_mcp = mcp_service.parse_namespaced_tool(tool_name)
-                            if parsed_mcp:
-                                server_name, mcp_tool_name = parsed_mcp
-                                server_stmt = select(MCPServer).where(MCPServer.name == server_name)
-                                server_res = await session.execute(server_stmt)
-                                mcp_server = server_res.scalar_one_or_none()
-                                if not mcp_server:
-                                    tool_output = f"Error: MCP Server '{server_name}' not found."
-                                else:
-                                    mcp_res = await mcp_service.execute_tool(
-                                        server=mcp_server,
-                                        tool_name=mcp_tool_name,
-                                        arguments=args,
-                                    )
-                                    tool_output = mcp_res.raw_text
-                            else:
-                                tool_output = await execute_tool(
+                            # Check for dangerous tool commands requiring user approval
+                            is_danger, danger_reason = approval_manager.is_dangerous(tool_name, args)
+                            tool_rejected = False
+                            if is_danger:
+                                run.status = "awaiting_approval"
+                                await session.commit()
+                                await self._log(
+                                    session, run_id, "warning",
+                                    f"Breakpoint triggered: {danger_reason}. Awaiting user approval...",
+                                    metadata={"pending_tool": tool_name, "arguments": args, "reason": danger_reason},
+                                )
+                                approved, rej_reason = await approval_manager.request_approval(
+                                    run_id=run_id,
                                     tool_name=tool_name,
                                     arguments=args,
-                                    sandbox=self.sandbox_manager,
-                                    container_id=container_id,
+                                    reason=danger_reason,
                                 )
+                                run.status = "running"
+                                await session.commit()
 
+                                if not approved:
+                                    tool_output = f"Tool execution rejected by user: {rej_reason}"
+                                    tool_rejected = True
+
+                            # Record Action event
+                            await self._record_event(
+                                session, run_id, step_index, "action",
+                                {"tool_name": tool_name, "arguments": args, "call_id": tc.get("id", "")},
+                            )
+
+                            if not tool_rejected:
+                                parsed_mcp = mcp_service.parse_namespaced_tool(tool_name)
+                                if parsed_mcp:
+                                    server_name, mcp_tool_name = parsed_mcp
+                                    server_stmt = select(MCPServer).where(MCPServer.name == server_name)
+                                    server_res = await session.execute(server_stmt)
+                                    mcp_server = server_res.scalar_one_or_none()
+                                    if not mcp_server:
+                                        tool_output = f"Error: MCP Server '{server_name}' not found."
+                                    else:
+                                        mcp_res = await mcp_service.execute_tool(
+                                            server=mcp_server,
+                                            tool_name=mcp_tool_name,
+                                            arguments=args,
+                                        )
+                                        tool_output = mcp_res.raw_text
+                                else:
+                                    tool_output = await execute_tool(
+                                        tool_name=tool_name,
+                                        arguments=args,
+                                        sandbox=self.sandbox_manager,
+                                        container_id=container_id,
+                                    )
                             await self._log(
                                 session, run_id, "info",
                                 f"Tool result: {tool_output[:200]}{'...' if len(tool_output) > 200 else ''}",
@@ -266,6 +329,15 @@ class AgentOrchestrator:
                                 content=processed_output,
                                 tool_call_id=tool_call_id,
                             ))
+
+                            # Record Observation event and capture workspace snapshot
+                            await self._record_event(
+                                session, run_id, step_index, "observation",
+                                {"tool_output": processed_output, "artifact_uri": artifact_uri, "call_id": tool_call_id},
+                            )
+                            step_index += 1
+                            workspace_service.create_step_snapshot(agent_workspace_dir, step_index)
+
                         # Loop again for LLM to process tool results
                         continue
 
@@ -328,11 +400,11 @@ class AgentOrchestrator:
                 await self._fail_run(session, run, str(exc))
 
             finally:
-                # ── 9. Always destroy the sandbox ──────────────────────────
+                # ── 9. Always destroy the sandbox and cleanup approval state
+                approval_manager.cleanup(run_id)
                 if container_id:
                     await self.sandbox_manager.destroy_sandbox(container_id)
                     logger.info("Sandbox %s destroyed for run %s", container_id, run_id)
-
     # ─────────────────────────────────────────────────────────────────────────
     # Helpers
     # ─────────────────────────────────────────────────────────────────────────
