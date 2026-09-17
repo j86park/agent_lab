@@ -1,10 +1,8 @@
 """Agent Lab — Pydantic schemas for API request and response validation."""
 
 from datetime import datetime
-from typing import Optional
-
-from pydantic import BaseModel, ConfigDict, Field, field_validator
-
+from typing import Any, Literal, Optional
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 class AgentBase(BaseModel):
     """Base schema for Agent data."""
@@ -293,3 +291,88 @@ class RunLogResponse(BaseModel):
     metadata_json: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# --- MCP Schemas ---
+
+class MCPServerBase(BaseModel):
+    """Base schema for an MCP server."""
+    name: str = Field(..., min_length=1, max_length=100)
+    description: Optional[str] = None
+    transport: Literal["stdio", "sse"] = "stdio"
+    command: Optional[str] = None
+    args: list[str] = Field(default_factory=list)
+    env: dict[str, str] = Field(default_factory=dict)
+    url: Optional[str] = None
+    is_active: bool = True
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        trimmed = v.strip()
+        if not trimmed:
+            raise ValueError("Server name cannot be empty")
+        if not trimmed.replace("-", "").replace("_", "").isalnum():
+            raise ValueError("Server name must contain only alphanumeric characters, hyphens, and underscores")
+        return trimmed
+
+
+class MCPServerCreate(MCPServerBase):
+    """Schema for creating a new MCP server."""
+    @model_validator(mode="after")
+    def validate_transport_fields(self) -> "MCPServerCreate":
+        if self.transport == "stdio" and (not self.command or not self.command.strip()):
+            raise ValueError("Command is required for stdio transport")
+        if self.transport == "sse" and (not self.url or not self.url.strip()):
+            raise ValueError("URL is required for SSE transport")
+        return self
+
+class MCPServerUpdate(BaseModel):
+    """Schema for updating an existing MCP server."""
+    name: Optional[str] = None
+    description: Optional[str] = None
+    transport: Optional[Literal["stdio", "sse"]] = None
+    command: Optional[str] = None
+    args: Optional[list[str]] = None
+    env: Optional[dict[str, str]] = None
+    url: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class MCPServerResponse(MCPServerBase):
+    """Schema for MCP server response."""
+    id: str
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MCPServerListResponse(BaseModel):
+    """Schema for list of MCP servers."""
+    servers: list[MCPServerResponse]
+    total: int
+
+
+class MCPToolInfo(BaseModel):
+    """Schema for an individual tool exposed by an MCP server."""
+    server_id: str
+    server_name: str
+    name: str
+    namespaced_name: str  # mcp__{server_name}__{name}
+    description: Optional[str] = None
+    input_schema: dict[str, Any] = Field(default_factory=dict)
+
+
+class MCPToolCallRequest(BaseModel):
+    """Schema for executing a tool call directly on an MCP server."""
+    server_id: str
+    tool_name: str
+    arguments: dict[str, Any] = Field(default_factory=dict)
+
+
+class MCPToolCallResponse(BaseModel):
+    """Schema for the result of an MCP tool execution."""
+    content: list[dict[str, Any]] = Field(default_factory=list)
+    is_error: bool = False
+    raw_text: str = ""

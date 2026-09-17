@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import ForeignKey, String, Text, Float, Integer, func
+from sqlalchemy import Boolean, ForeignKey, String, Text, Float, Integer, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -224,3 +224,27 @@ class RunLog(Base):
 
     # Relationships
     run: Mapped["Run"] = relationship(back_populates="logs")
+
+
+class MCPServer(Base):
+    """Model Context Protocol (MCP) server configuration."""
+
+    __tablename__ = "mcp_servers"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=generate_uuid
+    )
+    name: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    transport: Mapped[str] = mapped_column(String(20), nullable=False, default="stdio")  # "stdio" | "sse"
+    command: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    args_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")  # JSON array
+    env_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")  # JSON dict
+    url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)  # For SSE
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        nullable=False, server_default=func.now(), onupdate=func.now()
+    )

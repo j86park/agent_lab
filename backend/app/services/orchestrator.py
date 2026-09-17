@@ -24,7 +24,8 @@ from app.services.sandbox import SandboxConfig, SandboxManager
 from app.services.skills_injector import build_system_prompt
 from app.services.tools import execute_tool, get_tool_definitions, AVAILABLE_TOOLS
 from app.services.evaluator import EvaluationService
-from app.models import Agent, Run, RunLog, TestCase
+from app.services.mcp_service import mcp_service
+from app.models import Agent, Run, RunLog, TestCase, MCPServer
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +103,19 @@ class AgentOrchestrator:
                     t for t in get_tool_definitions()
                     if t["function"]["name"] in enabled_tools
                 ] if enabled_tools else []
+
+                # Merge any enabled MCP tools
+                try:
+                    mcp_tools = await mcp_service.list_all_tools(session)
+                    for mtool in mcp_tools:
+                        if (
+                            mtool.namespaced_name in enabled_tools
+                            or "mcp" in enabled_tools
+                            or f"mcp__{mtool.server_name}" in enabled_tools
+                        ):
+                            tool_defs.append(mcp_service.to_openai_tool(mtool))
+                except Exception as e:
+                    logger.warning("Could not discover MCP tools for run %s: %s", run_id, e)
 
                 # ── 5. Create sandbox ──────────────────────────────────────
                 constraints = _json.loads(agent.constraints_config or "{}")
@@ -190,12 +204,28 @@ class AgentOrchestrator:
                                 f"Tool call: {tool_name}({args})",
                             )
 
-                            tool_output = await execute_tool(
-                                tool_name=tool_name,
-                                arguments=args,
-                                sandbox=self.sandbox_manager,
-                                container_id=container_id,
-                            )
+                            parsed_mcp = mcp_service.parse_namespaced_tool(tool_name)
+                            if parsed_mcp:
+                                server_name, mcp_tool_name = parsed_mcp
+                                server_stmt = select(MCPServer).where(MCPServer.name == server_name)
+                                server_res = await session.execute(server_stmt)
+                                mcp_server = server_res.scalar_one_or_none()
+                                if not mcp_server:
+                                    tool_output = f"Error: MCP Server '{server_name}' not found."
+                                else:
+                                    mcp_res = await mcp_service.execute_tool(
+                                        server=mcp_server,
+                                        tool_name=mcp_tool_name,
+                                        arguments=args,
+                                    )
+                                    tool_output = mcp_res.raw_text
+                            else:
+                                tool_output = await execute_tool(
+                                    tool_name=tool_name,
+                                    arguments=args,
+                                    sandbox=self.sandbox_manager,
+                                    container_id=container_id,
+                                )
 
                             await self._log(
                                 session, run_id, "info",

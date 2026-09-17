@@ -15,8 +15,9 @@ from app.routers.settings import router as settings_router
 from app.routers.skills import router as skills_router
 from app.routers.snippets import router as snippets_router
 from app.routers.test_suites import router as suites_router
+from app.routers.mcp import router as mcp_router
 from app.routers.ws import router as ws_router
-
+from app.services.mcp_service import mcp_service
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -26,8 +27,8 @@ async def lifespan(app: FastAPI):
     settings.ensure_data_dirs()
     await init_db()
     yield
-    # Shutdown (cleanup if needed)
-
+    # Shutdown — release MCP connections and cleanup
+    await mcp_service.close_all()
 
 app = FastAPI(
     title="Agent Lab API",
@@ -54,6 +55,7 @@ app.include_router(skills_router)
 app.include_router(snippets_router)
 app.include_router(suites_router)
 app.include_router(settings_router)
+app.include_router(mcp_router)
 app.include_router(ws_router)
 
 
