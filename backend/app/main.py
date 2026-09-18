@@ -23,7 +23,6 @@ from app.services.mcp_service import mcp_service
 async def lifespan(app: FastAPI):
     """Application startup and shutdown lifecycle."""
     # Startup
-    print(f"DEBUG: settings.tavily_api_key status: {'SET' if settings.tavily_api_key else 'NOT SET'}")
     settings.ensure_data_dirs()
     await init_db()
     yield

@@ -28,6 +28,7 @@ from app.database import async_session, init_db
 from app.main import app
 from app.models import Agent, Run, TestCase, TrajectoryEvent
 from app.services.evaluator import EvaluationService
+from app.services.mcp_service import mcp_service
 from app.services.llm.base import LLMResponse
 
 
@@ -35,6 +36,7 @@ from app.services.llm.base import LLMResponse
 async def setup_test_db():
     """Clean test records before/after tests."""
     settings.ensure_data_dirs()
+    await mcp_service.close_all()
     await init_db()
     async with async_session() as session:
         await session.execute(text("DELETE FROM trajectory_events WHERE run_id LIKE 'eval_test_%'"))
@@ -42,6 +44,7 @@ async def setup_test_db():
         await session.execute(text("DELETE FROM agents WHERE name LIKE 'Eval%'"))
         await session.commit()
     yield
+    await mcp_service.close_all()
     async with async_session() as session:
         await session.execute(text("DELETE FROM trajectory_events WHERE run_id LIKE 'eval_test_%'"))
         await session.execute(text("DELETE FROM runs WHERE task LIKE 'eval_test_%' OR id LIKE 'eval_test_%'"))

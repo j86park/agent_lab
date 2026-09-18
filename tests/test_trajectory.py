@@ -32,6 +32,7 @@ from app.models import Agent, Run, RunLog, TrajectoryEvent
 from app.services.approval_manager import approval_manager
 from app.services.llm.base import LLMMessage, LLMResponse
 from app.services.orchestrator import AgentOrchestrator
+from app.services.mcp_service import mcp_service
 from app.services.workspace_service import workspace_service
 
 
@@ -39,6 +40,7 @@ from app.services.workspace_service import workspace_service
 async def setup_test_db():
     """Clean test records and temporary workspace dirs before/after tests."""
     settings.ensure_data_dirs()
+    await mcp_service.close_all()
     await init_db()
     async with async_session() as session:
         await session.execute(text("DELETE FROM trajectory_events WHERE run_id LIKE 'traj_test_%'"))
@@ -46,6 +48,7 @@ async def setup_test_db():
         await session.execute(text("DELETE FROM agents WHERE name LIKE 'Traj%'"))
         await session.commit()
     yield
+    await mcp_service.close_all()
     async with async_session() as session:
         await session.execute(text("DELETE FROM trajectory_events WHERE run_id LIKE 'traj_test_%'"))
         await session.execute(text("DELETE FROM runs WHERE task LIKE 'traj_test_%' OR id LIKE 'traj_test_%'"))
@@ -133,7 +136,8 @@ async def test_event_stream_integrity():
 # M3-T2: Workspace Snapshot Creation & Reversion
 # ─────────────────────────────────────────────────────────────────────────────
 
-def test_step_snapshot_creation(tmp_path: Path):
+@pytest.mark.asyncio
+async def test_step_snapshot_creation(tmp_path: Path):
     """M3-T2: Taking snapshots and restoring them achieves exact byte-level filesystem rollback."""
     workspace = tmp_path / "agent_ws_test"
     workspace.mkdir()

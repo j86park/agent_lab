@@ -1,5 +1,5 @@
 import { getErrorMessage } from "@/lib/utils";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
     ArrowLeft,
@@ -124,23 +124,9 @@ export default function AgentEditorPage() {
         };
 
         fetchData();
-        if (isEditMode && id) {
-            // Load workspace files separately (non-blocking)
-            loadWorkspaceFiles();
-        }
     }, [id, isEditMode]);
 
-    const handleInputChange = (field: keyof Agent, value: string | boolean | number | object | null | undefined) => {
-        setFormData((prev) => ({ ...prev, [field]: value } as Partial<Agent>));
-
-        // Changed: Removed auto model update, handled in AgentBasicInfo now wait it's not handled in AgentBasicInfo! Let's keep it here!
-        if (field === "provider") {
-            const firstModel = value === "anthropic" ? "claude-3-5-sonnet-20240620" : value === "openrouter" ? "openai/gpt-4o" : value === "ollama" ? "llama3" : "gpt-4o";
-            setFormData((prev) => ({ ...prev, provider: value as string, model: firstModel } as Partial<Agent>));
-        }
-    };
-
-    const loadWorkspaceFiles = async () => {
+    const loadWorkspaceFiles = useCallback(async () => {
         if (!id) return;
         setIsLoadingWorkspace(true);
         try {
@@ -150,6 +136,22 @@ export default function AgentEditorPage() {
             // workspace dir may not exist yet — ignore
         } finally {
             setIsLoadingWorkspace(false);
+        }
+    }, [id]);
+
+    useEffect(() => {
+        if (isEditMode && id) {
+            loadWorkspaceFiles();
+        }
+    }, [id, isEditMode, loadWorkspaceFiles]);
+
+    const handleInputChange = (field: keyof Agent, value: string | boolean | number | object | null | undefined) => {
+        setFormData((prev) => ({ ...prev, [field]: value } as Partial<Agent>));
+
+        // Changed: Removed auto model update, handled in AgentBasicInfo now wait it's not handled in AgentBasicInfo! Let's keep it here!
+        if (field === "provider") {
+            const firstModel = value === "anthropic" ? "claude-3-5-sonnet-20240620" : value === "openrouter" ? "openai/gpt-4o" : value === "ollama" ? "llama3" : "gpt-4o";
+            setFormData((prev) => ({ ...prev, provider: value as string, model: firstModel } as Partial<Agent>));
         }
     };
 

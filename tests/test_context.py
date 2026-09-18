@@ -32,6 +32,7 @@ from app.services.context_engine import ContextEngine, context_engine
 from app.services.llm.anthropic_provider import ANTHROPIC_PRICING, AnthropicProvider
 from app.services.llm.base import LLMMessage, LLMResponse
 from app.services.llm.openai_provider import OPENAI_PRICING, OpenAIProvider
+from app.services.mcp_service import mcp_service
 from app.services.orchestrator import AgentOrchestrator
 
 
@@ -39,12 +40,14 @@ from app.services.orchestrator import AgentOrchestrator
 async def setup_test_db():
     """Ensure data directories and DB are clean before/after tests."""
     settings.ensure_data_dirs()
+    await mcp_service.close_all()
     await init_db()
     async with async_session() as session:
         await session.execute(text("DELETE FROM runs WHERE task LIKE 'context_test_%'"))
         await session.execute(text("DELETE FROM agents WHERE name LIKE 'Context%'"))
         await session.commit()
     yield
+    await mcp_service.close_all()
     async with async_session() as session:
         await session.execute(text("DELETE FROM runs WHERE task LIKE 'context_test_%'"))
         await session.execute(text("DELETE FROM agents WHERE name LIKE 'Context%'"))

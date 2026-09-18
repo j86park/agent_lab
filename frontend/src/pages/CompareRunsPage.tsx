@@ -145,14 +145,14 @@ export default function CompareRunsPage() {
     const [logs2, setLogs2] = useState<RunLog[]>([]);
     const [trajectoryDiff, setTrajectoryDiff] = useState<TrajectoryDiffResult | null>(null);
     const [pairwiseResult, setPairwiseResult] = useState<PairwiseEvaluationResult | null>(null);
-    const [isLoadingDiff, setIsLoadingDiff] = useState(false);
-    const [isLoadingPairwise, setIsLoadingPairwise] = useState(false);
+    const [isLoadingDiff, setIsLoadingDiff] = useState(Boolean(run1Id && run2Id));
+    const [isLoadingPairwise, setIsLoadingPairwise] = useState(Boolean(run1Id && run2Id));
     const [error, setError] = useState<string | null>(null);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(Boolean(run1Id && run2Id));
+    const missingParamsError = !run1Id || !run2Id ? "Two run IDs are required. Go back to History and select 2 runs." : null;
+
     useEffect(() => {
         if (!run1Id || !run2Id) {
-            setError("Two run IDs are required. Go back to History and select 2 runs.");
-            setLoading(false);
             return;
         }
 
@@ -171,13 +171,11 @@ export default function CompareRunsPage() {
             .catch(() => setError("Failed to load one or both runs."))
             .finally(() => setLoading(false));
 
-        setIsLoadingDiff(true);
         runApi.compareDiff(run1Id, run2Id)
             .then(setTrajectoryDiff)
             .catch((e) => console.error("Diff failed", e))
             .finally(() => setIsLoadingDiff(false));
 
-        setIsLoadingPairwise(true);
         runApi.comparePairwise(run1Id, run2Id)
             .then(setPairwiseResult)
             .catch((e) => console.error("Pairwise failed", e))
@@ -191,14 +189,15 @@ export default function CompareRunsPage() {
         );
     }
 
-    if (error || !run1 || !run2) {
+    const displayError = missingParamsError || error;
+    if (displayError || !run1 || !run2) {
         return (
             <div className="space-y-4">
                 <Button variant="ghost" size="sm" onClick={() => navigate("/history")}>
                     <ArrowLeft className="mr-2 h-4 w-4" /> Back to History
                 </Button>
                 <Alert variant="destructive">
-                    <AlertDescription>{error ?? "Unknown error"}</AlertDescription>
+                    <AlertDescription>{displayError ?? "Unknown error"}</AlertDescription>
                 </Alert>
             </div>
         );

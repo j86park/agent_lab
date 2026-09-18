@@ -1,5 +1,5 @@
 import { getErrorMessage } from "@/lib/utils";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
 import { agentApi } from "@/lib/api";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -15,7 +15,8 @@ export function PromptPreview({ agentId, triggerRefresh = 0 }: PromptPreviewProp
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const fetchPreview = async () => {
+    const fetchPreview = useCallback(async () => {
+        if (!agentId) return;
         setIsLoading(true);
         setError(null);
         try {
@@ -27,13 +28,13 @@ export function PromptPreview({ agentId, triggerRefresh = 0 }: PromptPreviewProp
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [agentId]);
 
     useEffect(() => {
         if (agentId) {
             fetchPreview();
         }
-    }, [agentId, triggerRefresh]);
+    }, [agentId, triggerRefresh, fetchPreview]);
 
     if (isLoading) {
         return (

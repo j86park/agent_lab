@@ -1,5 +1,5 @@
 import { getErrorMessage } from "@/lib/utils";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import {
     ChevronLeft,
@@ -96,7 +96,7 @@ export default function TestSuiteDetailsPage() {
     // Batch run state
     const [isRunningBatch, setIsRunningBatch] = useState(false);
 
-    const fetchData = async () => {
+    const fetchData = useCallback(async () => {
         if (!id) return;
         setIsLoading(true);
         setError(null);
@@ -113,11 +113,11 @@ export default function TestSuiteDetailsPage() {
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [id]);
 
     useEffect(() => {
         fetchData();
-    }, [id]);
+    }, [fetchData]);
 
     const openCreateDialog = () => {
         setEditingCase(null);
